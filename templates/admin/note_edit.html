@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}{{ mode }} Note · {{ site_name }}{% endblock %}
+{% block content %}
+<section class="stack-header polished-admin-header">
+  <div>
+    <p class="eyebrow">Admin</p>
+    <h1>{{ mode }} Note</h1>
+    <p class="muted">当前用户：{{ username }}</p>
+  </div>
+</section>
+
+<form class="editor-grid" action="/admin/notes/save" method="post">
+  <div class="panel stack-form interactive-card">
+    <div class="panel-title-row">
+      <h2>元信息</h2>
+      <span class="panel-chip">meta</span>
+    </div>
+    <label>标题<input type="text" name="title" value="{{ note.title }}" required /></label>
+    <label>Slug<input type="text" name="slug" value="{{ note.slug }}" /></label>
+    <label>摘要<textarea name="summary">{{ note.summary }}</textarea></label>
+    <label>标签（逗号分隔）<input type="text" name="tags" value="{{ note.tags }}" /></label>
+    <label>别名（逗号分隔）<input type="text" name="aliases" value="{{ note.aliases }}" /></label>
+    <label>状态
+      <select name="status">
+        <option value="published" {% if note.status == "published" %}selected{% endif %}>published</option>
+        <option value="draft" {% if note.status == "draft" %}selected{% endif %}>draft</option>
+      </select>
+    </label>
+    <div class="admin-actions">
+      <button type="submit">保存笔记</button>
+      <a class="button secondary" href="/admin">返回仪表盘</a>
+    </div>
+  </div>
+
+  <div class="panel stack-form wide-editor interactive-card">
+    <div class="panel-title-row">
+      <h2>Markdown 正文</h2>
+      <span class="panel-chip">editor</span>
+    </div>
+    <label>正文<textarea name="body" class="editor-textarea">{{ note.body }}</textarea></label>
+  </div>
+</form>
+{% endblock %}

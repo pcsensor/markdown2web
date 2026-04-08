@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}{{ note.title }} · {{ site_name }}{% endblock %}
+{% block content %}
+<div class="note-hero panel interactive-card">
+  <div class="note-hero-main">
+    <p class="eyebrow">{{ note.updated_at }}</p>
+    <h1>{{ note.title }}</h1>
+    <p class="note-summary">{{ note.summary }}</p>
+    <div class="tag-row">
+      {% for tag in note.tags %}
+      <a class="tag" href="/tags/{{ tag }}">{{ tag }}</a>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="note-hero-side">
+    <div class="hero-stat interactive-card interactive-card-subtle">
+      <strong>{{ note.word_count }}</strong>
+      <span>words</span>
+    </div>
+    <div class="hero-stat interactive-card interactive-card-subtle">
+      <strong>{{ note.headings.len() }}</strong>
+      <span>sections</span>
+    </div>
+  </div>
+</div>
+
+<div class="note-layout">
+  <article class="note-card prose interactive-card">
+    {{ note.html|safe }}
+  </article>
+
+  <aside class="note-sidebar">
+    <div class="sidebar-card interactive-card sidebar-panel">
+      <div class="sidebar-title-row">
+        <span class="surface-icon small" aria-hidden="true">
+          <svg viewBox="0 0 20 20" fill="none"><path d="M5 6h10M5 10h10M5 14h6" /></svg>
+        </span>
+        <h2>目录</h2>
+      </div>
+      <ul class="toc-list">
+        {% for heading in note.headings %}
+        <li class="toc-level-{{ heading.level }}"><a href="#{{ heading.id }}">{{ heading.title }}</a></li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    <div class="sidebar-card interactive-card sidebar-panel">
+      <div class="sidebar-title-row">
+        <span class="surface-icon small" aria-hidden="true">
+          <svg viewBox="0 0 20 20" fill="none"><path d="M8 5 4 9l4 4" /><path d="M12 5l4 4-4 4" /><path d="M7 15h6" /></svg>
+        </span>
+        <h2>Backlinks</h2>
+      </div>
+      <ul class="link-list">
+        {% for link in backlinks %}
+        <li><a href="/notes/{{ link.slug }}">{{ link.title }}</a></li>
+        {% endfor %}
+        {% if backlinks.len() == 0 %}
+        <li class="muted">暂无反向链接</li>
+        {% endif %}
+      </ul>
+    </div>
+  </aside>
+</div>
+{% endblock %}

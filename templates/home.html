@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}{{ site_name }} · 首页{% endblock %}
+{% block content %}
+<section class="hero hero-grid">
+  <div class="hero-copy-block">
+    <div class="hero-badge">
+      <span class="hero-badge-icon" aria-hidden="true">
+        <svg viewBox="0 0 20 20" fill="none"><path d="M10 2.5 12.15 7 17 7.7l-3.5 3.45.83 4.85L10 13.7 5.67 16l.83-4.85L3 7.7 7.85 7 10 2.5Z" /></svg>
+      </span>
+      <span>Modern Markdown publishing</span>
+    </div>
+    <h1>把 Markdown 笔记变成更有质感的现代网站。</h1>
+    <p class="hero-copy">支持后台上传、文件夹监听自动更新、站内互链、图片与附件嵌入，同时保持清晰的内容结构与简洁的阅读体验。</p>
+    <div class="hero-actions">
+      <a class="button" href="/notes">浏览笔记</a>
+      <a class="button secondary" href="/admin">进入后台</a>
+    </div>
+    <div class="feature-pills">
+      <span class="feature-pill">Hover motion</span>
+      <span class="feature-pill">Link graph</span>
+      <span class="feature-pill">Asset embedding</span>
+      <span class="feature-pill">Rust backend</span>
+    </div>
+  </div>
+
+  <aside class="hero-panel panel interactive-card">
+    <div class="hero-panel-top">
+      <p class="eyebrow">Build signal</p>
+      <span class="signal-dot"></span>
+    </div>
+    <p class="hero-panel-copy">{{ build_message }}</p>
+    <div class="metric-grid">
+      <div class="metric-card interactive-card interactive-card-subtle">
+        <strong>Auto</strong>
+        <span>目录变化自动重建</span>
+      </div>
+      <div class="metric-card interactive-card interactive-card-subtle">
+        <strong>Wiki</strong>
+        <span>支持双链风格跳转</span>
+      </div>
+      <div class="metric-card interactive-card interactive-card-subtle">
+        <strong>Asset</strong>
+        <span>图片与附件公开映射</span>
+      </div>
+      <div class="metric-card interactive-card interactive-card-subtle">
+        <strong>Admin</strong>
+        <span>上传、编辑、手动重建</span>
+      </div>
+    </div>
+  </aside>
+</section>
+
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Latest notes</p>
+    <h2>最新内容</h2>
+  </div>
+  <a class="section-link" href="/notes">查看全部 →</a>
+</section>
+
+<section class="card-grid">
+  {% for note in notes %}
+  <article class="card interactive-card">
+    <div class="card-accent"></div>
+    <div class="card-head">
+      <span class="surface-icon" aria-hidden="true">
+        <svg viewBox="0 0 20 20" fill="none"><rect x="4" y="3" width="12" height="14" rx="3" /><path d="M7 7h6M7 10h6M7 13h4" /></svg>
+      </span>
+      <p class="card-meta">{{ note.updated_at }}</p>
+    </div>
+    <h2><a href="/notes/{{ note.slug }}">{{ note.title }}</a></h2>
+    <p>{{ note.summary }}</p>
+    <div class="tag-row">
+      {% for tag in note.tags %}
+      <a class="tag" href="/tags/{{ tag }}">{{ tag }}</a>
+      {% endfor %}
+    </div>
+    <div class="card-foot">
+      <span class="muted">继续阅读</span>
+      <span class="arrow-badge">→</span>
+    </div>
+  </article>
+  {% endfor %}
+</section>
+{% endblock %}

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Admin Login · {{ site_name }}{% endblock %}
+{% block content %}
+<section class="auth-shell auth-grid">
+  <div class="auth-copy">
+    <p class="eyebrow">Admin access</p>
+    <h1>登录后台，管理你的知识花园。</h1>
+    <p class="muted">上传 Markdown、更新资源，并在几秒内把变化同步到网站前台。</p>
+    <div class="feature-pills">
+      <span class="feature-pill">Upload</span>
+      <span class="feature-pill">Edit</span>
+      <span class="feature-pill">Rebuild</span>
+    </div>
+  </div>
+  <form class="panel interactive-card auth-panel" action="/admin/login" method="post">
+    <p class="eyebrow">Admin</p>
+    <h2>登录后台</h2>
+    {% match error %}
+      {% when Some with (message) %}
+        <p class="error-banner">{{ message }}</p>
+      {% when None %}
+      {% endmatch %}
+    <label>用户名<input type="text" name="username" value="admin" required /></label>
+    <label>密码<input type="password" name="password" placeholder="默认 admin123456" required /></label>
+    <button type="submit">进入控制台</button>
+  </form>
+</section>
+{% endblock %}

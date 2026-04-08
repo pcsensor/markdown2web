@@ -1,0 +1,154 @@
+use askama::Template;
+use axum::{
+    extract::{Path, Query, State},
+    response::{Html, IntoResponse},
+};
+use serde::Deserialize;
+
+use crate::{
+    app::AppState,
+    content::Note,
+    error::{AppError, AppResult},
+    search::index::search_notes,
+};
+
+#[derive(Debug, Clone)]
+struct LinkView {
+    slug: String,
+    title: String,
+}
+
+#[derive(Template)]
+#[template(path = "home.html")]
+struct HomeTemplate {
+    site_name: String,
+    notes: Vec<Note>,
+    build_message: String,
+}
+
+#[derive(Template)]
+#[template(path = "notes.html")]
+struct NotesTemplate {
+    site_name: String,
+    title: String,
+    notes: Vec<Note>,
+}
+
+#[derive(Template)]
+#[template(path = "note.html")]
+struct NoteTemplate {
+    site_name: String,
+    note: Note,
+    backlinks: Vec<LinkView>,
+}
+
+#[derive(Template)]
+#[template(path = "tag.html")]
+struct TagTemplate {
+    site_name: String,
+    tag: String,
+    notes: Vec<Note>,
+}
+
+#[derive(Template)]
+#[template(path = "search.html")]
+struct SearchTemplate {
+    site_name: String,
+    query: String,
+    notes: Vec<Note>,
+}
+
+#[derive(Deserialize)]
+pub struct SearchQuery {
+    q: Option<String>,
+}
+
+pub async fn home(State(state): State<AppState>) -> AppResult<Html<String>> {
+    let site = state.site.read().await.clone();
+    render(HomeTemplate {
+        site_name: state.config.site_name.clone(),
+        notes: site.published_notes().into_iter().take(8).collect(),
+        build_message: site.build_message,
+    })
+}
+
+pub async fn health(State(state): State<AppState>) -> impl IntoResponse {
+    let site = state.site.read().await;
+    format!("ok:{}", site.notes.len())
+}
+
+pub async fn notes_index(State(state): State<AppState>) -> AppResult<Html<String>> {
+    let site = state.site.read().await.clone();
+    render(NotesTemplate {
+        site_name: state.config.site_name.clone(),
+        title: "All Notes".into(),
+        notes: site.published_notes(),
+    })
+}
+
+pub async fn note_detail(
+    Path(slug): Path<String>,
+    State(state): State<AppState>,
+) -> AppResult<Html<String>> {
+    let site = state.site.read().await.clone();
+    let note = site
+        .note(&slug)
+        .filter(|note| note.is_published())
+        .ok_or_else(|| AppError::NotFound(format!("note {}", slug)))?;
+    let backlinks = site
+        .backlinks
+        .get(&slug)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|item_slug| {
+            site.notes.get(&item_slug).map(|note| LinkView {
+                slug: item_slug,
+                title: note.title.clone(),
+            })
+        })
+        .collect();
+    render(NoteTemplate {
+        site_name: state.config.site_name.clone(),
+        note,
+        backlinks,
+    })
+}
+
+pub async fn tag_detail(
+    Path(tag): Path<String>,
+    State(state): State<AppState>,
+) -> AppResult<Html<String>> {
+    let site = state.site.read().await.clone();
+    let notes = site
+        .tags
+        .get(&tag)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|slug| site.note(&slug))
+        .filter(|note| note.is_published())
+        .collect();
+    render(TagTemplate {
+        site_name: state.config.site_name.clone(),
+        tag,
+        notes,
+    })
+}
+
+pub async fn search(
+    Query(query): Query<SearchQuery>,
+    State(state): State<AppState>,
+) -> AppResult<Html<String>> {
+    let site = state.site.read().await.clone();
+    let query_value = query.q.unwrap_or_default();
+    render(SearchTemplate {
+        site_name: state.config.site_name.clone(),
+        notes: search_notes(&site, &query_value),
+        query: query_value,
+    })
+}
+
+fn render<T: Template>(template: T) -> AppResult<Html<String>> {
+    template.render().map(Html).map_err(AppError::internal)
+}

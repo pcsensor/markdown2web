@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} · {{ site_name }}{% endblock %}
+{% block content %}
+<section class="stack-header enhanced-header">
+  <div class="header-icon" aria-hidden="true">
+    <svg viewBox="0 0 20 20" fill="none"><rect x="4" y="3" width="12" height="14" rx="3" /><path d="M7 7h6M7 10h6M7 13h4" /></svg>
+  </div>
+  <div>
+    <p class="eyebrow">Knowledge base</p>
+    <h1>{{ title }}</h1>
+    <p class="muted">按内容结构浏览你的 Markdown 知识库。</p>
+  </div>
+</section>
+<div class="stack-list">
+  {% for note in notes %}
+  <article class="list-card interactive-card">
+    <div class="list-card-body">
+      <div class="list-meta-row">
+        <span class="surface-icon small" aria-hidden="true">
+          <svg viewBox="0 0 20 20" fill="none"><path d="M5 4h7l3 3v9H5z" /><path d="M12 4v3h3" /></svg>
+        </span>
+        <span class="card-meta">{{ note.updated_at }}</span>
+      </div>
+      <h2><a href="/notes/{{ note.slug }}">{{ note.title }}</a></h2>
+      <p>{{ note.summary }}</p>
+      <div class="tag-row">
+        {% for tag in note.tags %}
+        <a class="tag" href="/tags/{{ tag }}">{{ tag }}</a>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="list-card-side">
+      <span class="arrow-badge">→</span>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+{% endblock %}
