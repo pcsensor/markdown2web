@@ -30,7 +30,7 @@ fn test_config(temp: &TempDir) -> AppConfig {
         generated_dir,
         data_dir,
         admin_username: "admin".into(),
-        admin_password: "admin123456".into(),
+        admin_password: "Pcsensor1121@".into(),
         watch_enabled: false,
         upload_limit_mb: 10,
     }
@@ -121,7 +121,7 @@ async fn admin_auth_guard_and_save_note() {
         .method("POST")
         .uri("/admin/login")
         .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-        .body(Body::from("username=admin&password=admin123456"))
+        .body(Body::from("username=admin&password=Pcsensor1121@"))
         .unwrap();
     let response = router.clone().oneshot(login_request).await.unwrap();
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
