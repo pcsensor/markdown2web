@@ -64,7 +64,9 @@ async fn home_and_note_routes_render_content() {
     assert!(html.contains("reading-progress"));
     assert!(html.contains("/static/js/site.js"));
     assert!(html.contains("cursor-beacon"));
-    assert!(html.contains("hero-panel panel interactive-card"));
+    assert!(html.contains("hero-panel panel interactive-card hero-particle-panel"));
+    assert!(html.contains("data-particle-field"));
+    assert!(html.contains("hero-particle-canvas"));
     assert!(html.contains("metric-card interactive-card interactive-card-subtle"));
 
     let response = router
@@ -276,8 +278,12 @@ fn cursor_beacon_replaces_card_local_glow() {
 #[test]
 fn cursor_beacon_is_ring_like_not_filled_disc() {
     let css = fs::read_to_string("static/css/app.css").unwrap();
-    assert!(css.contains("background: transparent;"));
-    assert!(!css.contains("backdrop-filter: blur(10px);"));
+    let start = css.find(".cursor-beacon {").unwrap();
+    let end = css.find(".cursor-beacon::before {").unwrap();
+    let beacon_block = &css[start..end];
+
+    assert!(beacon_block.contains("background: transparent;"));
+    assert!(!beacon_block.contains("backdrop-filter"));
     assert!(css.contains("margin-left: 12px;"));
     assert!(css.contains("content: none;"));
     assert!(css.contains(".cursor-beacon-core {\n  display: none;"));
@@ -290,4 +296,24 @@ fn note_sidebar_spacing_and_toc_hover_styles_exist() {
     assert!(css.contains(".toc-list a:hover"));
     assert!(css.contains("font-size: 1.03rem;"));
     assert!(css.contains("font-weight: 700;"));
+}
+
+#[test]
+fn hero_particle_stage_wiring_exists() {
+    let home = fs::read_to_string("templates/home.html").unwrap();
+    let css = fs::read_to_string("static/css/app.css").unwrap();
+    let js = fs::read_to_string("static/js/site.js").unwrap();
+
+    assert!(home.contains("hero-particle-stage\" data-particle-field"));
+    assert!(home.contains("hero-particle-canvas"));
+    assert!(css.contains(".hero-particle-stage"));
+    assert!(css.contains("min-height: 460px;"));
+    assert!(css.contains("z-index: 0;"));
+    assert!(css.contains("inset: -8% -12% -8% 0;"));
+    assert!(js.contains("wireHeroParticles"));
+    assert!(js.contains("closest('.hero-particle-panel')"));
+    assert!(js.contains("state.clickImpulse"));
+    assert!(js.contains("scheduleAmbientBurst"));
+    assert!(js.contains("randomRange(5.2, 8.2)"));
+    assert!(js.contains("* 0.0085"));
 }

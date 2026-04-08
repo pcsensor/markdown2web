@@ -23,28 +23,33 @@
     </div>
   </div>
 
-  <aside class="hero-panel panel interactive-card">
-    <div class="hero-panel-top">
-      <p class="eyebrow">Build signal</p>
-      <span class="signal-dot"></span>
+  <aside class="hero-panel panel interactive-card hero-particle-panel">
+    <div class="hero-particle-stage" data-particle-field aria-hidden="true">
+      <canvas class="hero-particle-canvas"></canvas>
     </div>
-    <p class="hero-panel-copy">{{ build_message }}</p>
-    <div class="metric-grid">
-      <div class="metric-card interactive-card interactive-card-subtle">
-        <strong>Auto</strong>
-        <span>目录变化自动重建</span>
+    <div class="hero-panel-shell">
+      <div class="hero-panel-top">
+        <p class="eyebrow">Build signal</p>
+        <span class="signal-dot"></span>
       </div>
-      <div class="metric-card interactive-card interactive-card-subtle">
-        <strong>Wiki</strong>
-        <span>支持双链风格跳转</span>
-      </div>
-      <div class="metric-card interactive-card interactive-card-subtle">
-        <strong>Asset</strong>
-        <span>图片与附件公开映射</span>
-      </div>
-      <div class="metric-card interactive-card interactive-card-subtle">
-        <strong>Admin</strong>
-        <span>上传、编辑、手动重建</span>
+      <p class="hero-panel-copy">{{ build_message }}</p>
+      <div class="metric-grid">
+        <div class="metric-card interactive-card interactive-card-subtle">
+          <strong>Auto</strong>
+          <span>目录变化自动重建</span>
+        </div>
+        <div class="metric-card interactive-card interactive-card-subtle">
+          <strong>Wiki</strong>
+          <span>支持双链风格跳转</span>
+        </div>
+        <div class="metric-card interactive-card interactive-card-subtle">
+          <strong>Asset</strong>
+          <span>图片与附件公开映射</span>
+        </div>
+        <div class="metric-card interactive-card interactive-card-subtle">
+          <strong>Admin</strong>
+          <span>上传、编辑、手动重建</span>
+        </div>
       </div>
     </div>
   </aside>

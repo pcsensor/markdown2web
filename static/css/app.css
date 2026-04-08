@@ -358,6 +358,51 @@ select:focus-visible {
   gap: 12px;
   margin-top: 20px;
 }
+.hero-particle-panel {
+  display: grid;
+  min-height: 460px;
+  padding: 16px;
+}
+.hero-particle-stage {
+  position: absolute;
+  inset: -8% -12% -8% 0;
+  overflow: hidden;
+  border-radius: 34px;
+  z-index: 0;
+  background:
+    radial-gradient(circle at 78% 42%, rgba(244, 114, 255, 0.26), transparent 19%),
+    radial-gradient(circle at 66% 50%, rgba(147, 51, 234, 0.22), transparent 34%),
+    radial-gradient(circle at 28% 16%, rgba(255, 255, 255, 0.32), transparent 24%),
+    linear-gradient(90deg, rgba(246, 248, 251, 0.9) 0%, rgba(246, 248, 251, 0.54) 28%, rgba(246, 248, 251, 0) 54%);
+  opacity: 1;
+}
+.hero-particle-stage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 74% 38%, rgba(255, 255, 255, 0.12), transparent 18%),
+    radial-gradient(circle at 88% 66%, rgba(193, 71, 255, 0.08), transparent 24%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 24%, rgba(7, 10, 24, 0.04) 100%);
+  pointer-events: none;
+}
+.hero-particle-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  filter: saturate(1.06);
+}
+.hero-panel-shell {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  min-height: 100%;
+  padding: 6px 6px 6px;
+}
 .metric-card {
   padding: 14px;
   border-radius: 18px;
@@ -801,6 +846,8 @@ button.secondary, .button.secondary {
   .search-panel { grid-template-columns: 1fr; }
   .list-card, .note-hero { flex-direction: column; align-items: stretch; }
   .list-card-side { justify-content: flex-start; }
+  .hero-particle-panel { min-height: 400px; }
+  .hero-particle-stage { inset: 0 -4% -6% 12%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
