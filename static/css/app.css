@@ -373,39 +373,19 @@ select:focus-visible {
 }
 /* ── 吉祥物面板 ── */
 .hero-mascot-panel {
-  display: grid;
-  grid-template-rows: auto 1fr;
+  display: flex;
+  flex-direction: column;
   min-height: 460px;
   padding: 16px;
   isolation: isolate;
-  --mascot-size: clamp(120px, 32%, 160px);
-}
-
-.hero-mascot-panel::after {
-  content: "";
-  position: absolute;
-  inset: 30px 16px auto auto;
-  width: calc(var(--mascot-size) + 40px);
-  height: calc(var(--mascot-size) + 50px);
-  border-radius: 34px;
-  background:
-    radial-gradient(circle at 50% 44%, rgba(219,234,254,0.7), transparent 60%),
-    linear-gradient(145deg, rgba(255,255,255,0.4), rgba(37,99,235,0.06) 50%, rgba(20,184,166,0.06));
-  border: 1px solid rgba(143,177,255,0.16);
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.3), 0 20px 44px rgba(37,99,235,0.08);
-  pointer-events: none;
-  z-index: 0;
+  --mascot-size: clamp(120px, 28vw, 150px);
 }
 
 /* ── 吉祥物舞台 ── */
 .mascot-stage {
-  position: absolute;
-  top: 42px;
-  right: 28px;
-  width: calc(var(--mascot-size) + 20px);
-  height: calc(var(--mascot-size) + 30px);
   display: grid;
   place-items: center;
+  padding: 18px 0 10px;
   z-index: 1;
   pointer-events: auto;
 }
@@ -607,18 +587,16 @@ select:focus-visible {
 .hero-panel-shell {
   position: relative;
   z-index: 2;
-  display: grid;
-  gap: 4px;
-  align-content: start;
-  min-height: 100%;
-  padding: 6px 6px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  padding: 6px;
 }
 
 .hero-panel-copy-block {
   display: grid;
   gap: 10px;
-  max-width: calc(100% - var(--mascot-size) - 40px);
-  min-height: calc(var(--mascot-size) + 24px);
 }
 
 .metric-card {
@@ -1141,29 +1119,12 @@ button.secondary, .button.secondary {
   .list-card, .note-hero { flex-direction: column; align-items: stretch; }
   .list-card-side { justify-content: flex-start; }
   .hero-mascot-panel {
-    min-height: 400px;
+    min-height: 380px;
     --mascot-size: 110px;
-  }
-
-  .hero-mascot-panel::after {
-    inset: 20px auto auto 50%;
-    width: 160px;
-    height: 150px;
-    transform: translateX(-50%);
-  }
-
-  .mascot-stage {
-    top: 28px;
-    left: 50%;
-    right: auto;
-    width: 140px;
-    transform: translateX(-50%);
   }
 
   .hero-panel-copy-block {
     max-width: none;
-    min-height: 0;
-    padding-top: 150px;
   }
 }
 
