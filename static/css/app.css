@@ -1070,6 +1070,30 @@ select:focus-visible {
     inset 0 0 0 1px rgba(255,255,255,0.65),
     0 0 0 3px rgba(37,99,235,0.15);
 }
+
+/* 文章内注释文字闪烁：亮→暗 3 次 */
+@keyframes annotation-text-flash {
+  0%, 100% { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.65), 0 0 0 3px rgba(37,99,235,0.15); filter: brightness(1); }
+  20%       { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.9),  0 0 0 5px rgba(37,99,235,0.35); filter: brightness(1.18); }
+  40%       { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.65), 0 0 0 3px rgba(37,99,235,0.15); filter: brightness(1); }
+  60%       { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.9),  0 0 0 5px rgba(37,99,235,0.35); filter: brightness(1.18); }
+  80%       { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.65), 0 0 0 3px rgba(37,99,235,0.15); filter: brightness(1); }
+}
+.note-annotation.is-flashing {
+  animation: annotation-text-flash 700ms ease-in-out both;
+}
+
+/* 评论卡片闪烁：边框 + 背景色 3 次 */
+@keyframes annotation-card-flash {
+  0%, 100% { box-shadow: 0 4px 16px rgba(15,23,42,0.07), 0 1px 3px rgba(15,23,42,0.05); background-color: rgba(255,255,255,0.96); }
+  20%       { box-shadow: 0 0 0 3px color-mix(in srgb, var(--annotation-color, var(--accent)) 55%, transparent), 0 8px 24px rgba(15,23,42,0.12); background-color: color-mix(in srgb, var(--annotation-color, var(--accent)) 10%, rgba(255,255,255,0.96)); }
+  40%       { box-shadow: 0 4px 16px rgba(15,23,42,0.07), 0 1px 3px rgba(15,23,42,0.05); background-color: rgba(255,255,255,0.96); }
+  60%       { box-shadow: 0 0 0 3px color-mix(in srgb, var(--annotation-color, var(--accent)) 55%, transparent), 0 8px 24px rgba(15,23,42,0.12); background-color: color-mix(in srgb, var(--annotation-color, var(--accent)) 10%, rgba(255,255,255,0.96)); }
+  80%       { box-shadow: 0 4px 16px rgba(15,23,42,0.07), 0 1px 3px rgba(15,23,42,0.05); background-color: rgba(255,255,255,0.96); }
+}
+.annotation-comment-card.is-flashing {
+  animation: annotation-card-flash 700ms ease-in-out both;
+}
 .note-summary { color: var(--muted); font-size: 1.06rem; max-width: 48rem; }
 .sidebar-card h2 { margin: 0; }
 .sidebar-title-row {

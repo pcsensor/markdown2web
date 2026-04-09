@@ -643,6 +643,7 @@ function wireNoteAnnotations() {
         .forEach(({ annotation, rect }) => {
           const card = document.createElement('article');
           card.className = 'annotation-comment-card';
+          card.dataset.annotationId = String(annotation.id);
           if (annotation.color) {
             card.style.setProperty('--annotation-color', annotation.color);
           }
@@ -977,13 +978,35 @@ function wireNoteAnnotations() {
     return annotationElement;
   };
 
-  // 左键单击已有注释 → 打开操作面板
+  // 给元素列表依次添加闪烁类，动画结束后自动移除
+  const flashElements = (elements, cls) => {
+    elements.forEach((el) => {
+      el.classList.remove(cls);
+      // 强制回流，确保移除后再加能重新触发动画
+      void el.offsetWidth;
+      el.classList.add(cls);
+      el.addEventListener('animationend', () => el.classList.remove(cls), { once: true });
+    });
+  };
+
+  // 左键单击已有注释 → 有评论时闪烁对应卡片；自己的注释同时打开操作面板
   root.addEventListener('click', (event) => {
     const annotationElement = annotationFromEvent(event);
-    if (!annotationElement || !enabled) return;
+    if (!annotationElement) return;
     if ('button' in event && event.button !== 0) return;
     event.preventDefault();
-    openOwnedAnnotationPanel(annotationElement);
+
+    const annotationId = Number(annotationElement.dataset.annotationId);
+    const annotation = state.annotations.find((item) => item.id === annotationId);
+
+    // 有评论 → 闪烁对应评论卡片
+    if (annotation?.comment) {
+      const card = lane.querySelector(`[data-annotation-id="${annotationId}"]`);
+      if (card) flashElements([card], 'is-flashing');
+    }
+
+    // 自己的注释 → 打开操作面板
+    if (enabled) openOwnedAnnotationPanel(annotationElement);
   });
 
   // 右键点击已有注释 → 拦截浏览器菜单，打开操作面板
@@ -995,6 +1018,15 @@ function wireNoteAnnotations() {
     if (!enabled) return;
     event.preventDefault();
     openOwnedAnnotationPanel(annotationElement);
+  });
+
+  // 单击评论卡片 → 闪烁文章内对应注释文字
+  lane.addEventListener('click', (event) => {
+    const card = targetElement(event.target)?.closest('[data-annotation-id]');
+    if (!card) return;
+    const annotationId = Number(card.dataset.annotationId);
+    const segments = annotationSegments(annotationId);
+    if (segments.length) flashElements(segments, 'is-flashing');
   });
 
   document.addEventListener('click', (event) => {
