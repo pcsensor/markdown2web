@@ -64,9 +64,9 @@ async fn home_and_note_routes_render_content() {
     assert!(html.contains("reading-progress"));
     assert!(html.contains("/static/js/site.js"));
     assert!(html.contains("cursor-beacon"));
-    assert!(html.contains("hero-panel panel interactive-card hero-orb-panel"));
-    assert!(html.contains("data-orbital-focus"));
-    assert!(html.contains("hero-orb-module"));
+    assert!(html.contains("hero-panel panel interactive-card hero-mascot-panel"));
+    assert!(html.contains("data-mascot"));
+    assert!(html.contains("mascot-stage"));
     assert!(!html.contains("hero-particle-canvas"));
     assert!(html.contains("metric-card interactive-card interactive-card-subtle"));
 
@@ -300,29 +300,44 @@ fn note_sidebar_spacing_and_toc_hover_styles_exist() {
 }
 
 #[test]
-fn hero_orb_module_wiring_exists() {
+fn mascot_wiring_exists() {
     let home = fs::read_to_string("templates/home.html").unwrap();
     let css = fs::read_to_string("static/css/app.css").unwrap();
     let js = fs::read_to_string("static/js/site.js").unwrap();
 
-    assert!(home.contains("hero-orb-panel\" data-orbital-focus"));
-    assert!(home.contains("hero-orb-scene"));
-    assert!(home.contains("hero-orb-module"));
-    assert!(home.contains("hero-orb-glow hero-orb-glow-a"));
-    assert!(css.contains(".hero-orb-panel"));
-    assert!(css.contains("--orb-zone-size"));
-    assert!(css.contains("--orb-active: 0.28;"));
-    assert!(css.contains(".hero-orb-panel::after"));
-    assert!(css.contains(".hero-orb-module"));
-    assert!(css.contains(".hero-panel-copy-block"));
-    assert!(css.contains(".hero-orb-panel.is-orb-pulsing .hero-orb-pulse"));
-    assert!(js.contains("wireOrbitalFocus"));
-    assert!(js.contains("querySelectorAll('[data-orbital-focus]')"));
-    assert!(js.contains("const restingActive = 0.28;"));
-    assert!(js.contains("is-orb-static"));
-    assert!(js.contains("is-orb-pulsing"));
-    assert!(js.contains("ResizeObserver"));
-    assert!(!home.contains("hero-particle-stage"));
-    assert!(!js.contains("wireHeroParticles"));
-    assert!(!css.contains(".hero-particle-stage"));
+    // HTML 模板包含吉祥物元素
+    assert!(home.contains("hero-mascot-panel"));
+    assert!(home.contains("mascot-stage"));
+    assert!(home.contains("data-mascot"));
+    assert!(home.contains("data-pupil"));
+    assert!(home.contains("data-mouth"));
+    assert!(home.contains("data-mascot-label"));
+    assert!(home.contains("mascot-eye mascot-eye-l"));
+    assert!(home.contains("mascot-blush"));
+
+    // CSS 包含吉祥物样式
+    assert!(css.contains(".hero-mascot-panel"));
+    assert!(css.contains("--mascot-size"));
+    assert!(css.contains(".mascot-stage"));
+    assert!(css.contains(".mascot-face"));
+    assert!(css.contains(".mascot-eye"));
+    assert!(css.contains(".mascot-pupil"));
+    assert!(css.contains(".mascot-mouth"));
+    assert!(css.contains(".mascot-blush"));
+    assert!(css.contains(".mascot-ear"));
+    assert!(css.contains(".mascot-label"));
+
+    // JS 包含吉祥物逻辑
+    assert!(js.contains("wireMascot"));
+    assert!(js.contains("data-pupil"));
+    assert!(js.contains("data-mouth"));
+    assert!(js.contains("data-mascot-label"));
+    assert!(js.contains("switchExpression"));
+    assert!(js.contains("trackEyes"));
+
+    // 确认旧的 orb 元素已移除
+    assert!(!home.contains("hero-orb-panel"));
+    assert!(!home.contains("data-orbital-focus"));
+    assert!(!js.contains("wireOrbitalFocus"));
+    assert!(!css.contains(".hero-orb-panel"));
 }

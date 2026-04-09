@@ -155,116 +155,93 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
-function wireOrbitalFocus() {
-  const orbPanels = document.querySelectorAll('[data-orbital-focus]');
-  if (!orbPanels.length) return;
-  const restingActive = 0.28;
+function wireMascot() {
+  const mascot = document.querySelector('[data-mascot]');
+  if (!mascot) return;
 
-  orbPanels.forEach((panel) => {
-    if (!panel.querySelector('.hero-orb-module')) return;
+  const pupils = mascot.querySelectorAll('[data-pupil]');
+  const mouth = mascot.querySelector('[data-mouth]');
+  const label = mascot.querySelector('[data-mascot-label]');
+  const maxPupilMove = 5;
 
-    const state = {
-      currentX: 0,
-      currentY: 0,
-      currentActive: restingActive,
-      targetX: 0,
-      targetY: 0,
-      targetActive: restingActive,
-      rafId: 0,
-      pulseTimer: 0,
-      pulseRafId: 0,
-    };
+  // 表情定义：嘴巴符号、瞳孔符号、CSS 类名、提示文字
+  const expressions = [
+    { mouth: '◡',  pupil: '●',  cls: '',              tip: '' },
+    { mouth: '▽',  pupil: '★',  cls: 'expr-happy',    tip: '嘿嘿~' },
+    { mouth: '○',  pupil: '◎',  cls: 'expr-surprised', tip: '哇！' },
+    { mouth: 'ω',  pupil: '●',  cls: 'expr-smug',     tip: '略略略~' },
+    { mouth: '◡',  pupil: '♥',  cls: 'expr-love',     tip: '喜欢你！' },
+    { mouth: 'ε',  pupil: '●',  cls: 'expr-sleepy',   tip: 'zzZ...' },
+  ];
+  let exprIndex = 0;
+  let labelTimer = 0;
 
-    const sync = () => {
-      panel.style.setProperty('--orb-shift-x', state.currentX.toFixed(3));
-      panel.style.setProperty('--orb-shift-y', state.currentY.toFixed(3));
-      panel.style.setProperty('--orb-tilt-x', state.currentX.toFixed(3));
-      panel.style.setProperty('--orb-tilt-y', state.currentY.toFixed(3));
-      panel.style.setProperty('--orb-active', state.currentActive.toFixed(3));
-    };
+  // 眼睛追踪鼠标
+  const trackEyes = (event) => {
+    const rect = mascot.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height * 0.38;
+    const dx = event.clientX - cx;
+    const dy = event.clientY - cy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 1) return;
 
-    const staticMode = prefersReducedMotion() || !hasFinePointer();
-    if (staticMode) {
-      panel.classList.add('is-orb-static');
-      sync();
-      return;
-    }
+    const factor = Math.min(1, dist / 220);
+    const px = (dx / dist) * maxPupilMove * factor;
+    const py = (dy / dist) * maxPupilMove * factor;
 
-    const tick = () => {
-      state.currentX += (state.targetX - state.currentX) * 0.16;
-      state.currentY += (state.targetY - state.currentY) * 0.16;
-      state.currentActive += (state.targetActive - state.currentActive) * 0.14;
-      sync();
-
-      const settled =
-        Math.abs(state.targetX - state.currentX) < 0.002 &&
-        Math.abs(state.targetY - state.currentY) < 0.002 &&
-        Math.abs(state.targetActive - state.currentActive) < 0.002;
-
-      if (settled) {
-        state.currentX = state.targetX;
-        state.currentY = state.targetY;
-        state.currentActive = state.targetActive;
-        sync();
-        state.rafId = 0;
-        return;
-      }
-
-      state.rafId = window.requestAnimationFrame(tick);
-    };
-
-    const queueFrame = () => {
-      if (state.rafId) return;
-      state.rafId = window.requestAnimationFrame(tick);
-    };
-
-    const updateTargets = (event) => {
-      const rect = panel.getBoundingClientRect();
-      const px = (event.clientX - rect.left) / rect.width;
-      const py = (event.clientY - rect.top) / rect.height;
-
-      state.targetX = clamp((px - 0.72) * 1.7, -1, 1);
-      state.targetY = clamp((py - 0.28) * 1.8, -1, 1);
-      state.targetActive = 1;
-      queueFrame();
-    };
-
-    const release = () => {
-      state.targetX = 0;
-      state.targetY = 0;
-      state.targetActive = restingActive;
-      queueFrame();
-    };
-
-    const pulse = () => {
-      panel.classList.remove('is-orb-pulsing');
-      if (state.pulseRafId) {
-        window.cancelAnimationFrame(state.pulseRafId);
-      }
-      window.clearTimeout(state.pulseTimer);
-      state.pulseRafId = window.requestAnimationFrame(() => {
-        panel.classList.add('is-orb-pulsing');
-        state.pulseTimer = window.setTimeout(() => {
-          panel.classList.remove('is-orb-pulsing');
-        }, 520);
-      });
-    };
-
-    sync();
-
-    panel.addEventListener('pointerenter', updateTargets);
-    panel.addEventListener('pointermove', updateTargets);
-    panel.addEventListener('pointerleave', release);
-    panel.addEventListener('pointerdown', (event) => {
-      updateTargets(event);
-      pulse();
+    pupils.forEach((p) => {
+      p.style.setProperty('--pupil-x', `${px.toFixed(1)}px`);
+      p.style.setProperty('--pupil-y', `${py.toFixed(1)}px`);
     });
+  };
 
-    if (typeof ResizeObserver !== 'undefined') {
-      const observer = new ResizeObserver(() => release());
-      observer.observe(panel);
-    }
-  });
+  // 随机眨眼
+  const blink = () => {
+    if (mascot.classList.contains('expr-sleepy') || mascot.classList.contains('expr-happy')) return;
+    mascot.classList.add('expr-blink');
+    setTimeout(() => mascot.classList.remove('expr-blink'), 160);
+  };
+  const scheduleBlink = () => {
+    const delay = 2400 + Math.random() * 4000;
+    setTimeout(() => { blink(); scheduleBlink(); }, delay);
+  };
+  scheduleBlink();
+
+  // 显示浮动标签
+  const showLabel = (text) => {
+    if (!label || !text) return;
+    clearTimeout(labelTimer);
+    label.textContent = text;
+    label.classList.add('is-show');
+    labelTimer = setTimeout(() => label.classList.remove('is-show'), 1800);
+  };
+
+  // 切换表情
+  const switchExpression = () => {
+    const prev = expressions[exprIndex];
+    exprIndex = (exprIndex + 1) % expressions.length;
+    const next = expressions[exprIndex];
+
+    if (prev.cls) mascot.classList.remove(prev.cls);
+    if (next.cls) mascot.classList.add(next.cls);
+
+    if (mouth) mouth.textContent = next.mouth;
+    pupils.forEach((p) => { p.textContent = next.pupil; });
+
+    // 弹跳动画
+    mascot.classList.remove('is-bouncing');
+    requestAnimationFrame(() => mascot.classList.add('is-bouncing'));
+    setTimeout(() => mascot.classList.remove('is-bouncing'), 460);
+
+    showLabel(next.tip);
+  };
+
+  // 绑定事件
+  if (!prefersReducedMotion() && hasFinePointer()) {
+    window.addEventListener('pointermove', trackEyes, { passive: true });
+  }
+  mascot.addEventListener('click', switchExpression);
 }
 
 function wireButtons() {
@@ -360,7 +337,7 @@ function init() {
   wireScrollState();
   wireRevealAnimations();
   wireCursorBeacon();
-  wireOrbitalFocus();
+  wireMascot();
   wireButtons();
   wireCardGlow();
   renderMath();
