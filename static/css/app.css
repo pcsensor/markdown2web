@@ -1611,6 +1611,14 @@ button.secondary, .button.secondary {
   transform: translateY(-7px) rotate(-45deg);
 }
 
+.nav-links {
+  position: fixed;
+  top: 0;
+  right: 0;
+  padding: 16px calc((100vw - min(1140px, 100vw - 32px)) / 2 + 16px) 16px 16px;
+  z-index: 25;
+}
+
 @media (max-width: 768px) {
   .nav-toggle {
     display: flex;
