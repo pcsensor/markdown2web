@@ -424,14 +424,15 @@ function wireNoteAnnotations() {
     requestAnimationFrame(() => toolbar.classList.add('is-visible'));
   };
 
-  const updateToolbarState = () => {
+const updateToolbarState = () => {
     const annotation = state.pending?.annotation ?? null;
     const hasHighlight = Boolean(annotation?.color);
     const hasComment = Boolean(annotation?.comment);
+    const canDeleteComment = annotation && hasComment && isOwnedAnnotation(annotation);
     highlightButton.textContent = hasHighlight ? '取消高亮' : '高亮';
     commentButton.textContent = hasComment ? '编辑评论' : '评论';
     colorInput.value = annotation?.color || colorInput.value || '#fde68a';
-    if (deleteCommentButton) deleteCommentButton.hidden = !hasComment || !isOwnedAnnotation(annotation);
+    if (deleteCommentButton) deleteCommentButton.hidden = !canDeleteComment;
   };
 
   const showToolbarForPending = (pending, rect) => {
@@ -931,7 +932,7 @@ function wireNoteAnnotations() {
     }
     const pending = validSelectionRange();
     if (!pending) {
-      if (state.pending) return;
+      // 如果新的选中没有匹配到批注，清除之前的状态并隐藏工具栏
       hideToolbar();
       return;
     }
