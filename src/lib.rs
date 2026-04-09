@@ -5,4 +5,5 @@ pub mod content;
 pub mod error;
 pub mod search;
 pub mod store;
+pub mod time;
 pub mod web;

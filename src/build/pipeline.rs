@@ -1,6 +1,5 @@
 use std::{collections::HashSet, sync::Arc};
 
-use chrono::Utc;
 use tokio::sync::{Mutex, RwLock};
 
 use crate::{
@@ -15,6 +14,7 @@ use crate::{
     },
     error::AppResult,
     store::{filesystem, sqlite::AppDatabase},
+    time,
 };
 
 #[derive(Debug, Clone)]
@@ -86,7 +86,7 @@ impl BuildService {
                 headings,
                 outbound_links: rewritten.outbound_links,
                 asset_refs: note_assets,
-                updated_at: Utc::now().to_rfc3339(),
+                updated_at: time::now_cst_display(),
                 word_count: word_count(&source.body),
             });
         }

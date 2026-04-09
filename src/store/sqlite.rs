@@ -9,7 +9,10 @@ use rand::{Rng, distributions::Alphanumeric};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
 
-use crate::error::{AppError, AppResult};
+use crate::{
+    error::{AppError, AppResult},
+    time,
+};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct BuildEvent {
@@ -368,7 +371,10 @@ impl AppDatabase {
             Ok(BuildEvent {
                 level: row.get(0)?,
                 message: row.get(1)?,
-                created_at: row.get(2)?,
+                created_at: row
+                    .get::<_, String>(2)
+                    .map(|s| time::format_cst(&s))
+                    .unwrap_or_default(),
             })
         })?;
         Ok(rows.filter_map(Result::ok).collect())
@@ -422,8 +428,14 @@ fn annotation_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<NoteAnnotati
         color: row.get(6)?,
         comment: row.get(7)?,
         visibility: row.get(8)?,
-        created_at: row.get(9)?,
-        updated_at: row.get(10)?,
+        created_at: row
+            .get::<_, String>(9)
+            .map(|s| time::format_cst(&s))
+            .unwrap_or_default(),
+        updated_at: row
+            .get::<_, String>(10)
+            .map(|s| time::format_cst(&s))
+            .unwrap_or_default(),
     })
 }
 

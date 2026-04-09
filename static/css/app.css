@@ -898,51 +898,122 @@ select:focus-visible {
   left: 0;
   right: 0;
   display: grid;
-  gap: 6px;
-  padding: 11px 13px;
+  gap: 8px;
+  padding: 0;
   border-radius: 16px;
-  background: rgba(255,255,255,0.92);
-  border: 1px solid rgba(217,225,236,0.92);
-  box-shadow: 0 10px 22px rgba(15,23,42,0.08);
+  background: rgba(255,255,255,0.96);
+  border: 1px solid rgba(217,225,236,0.88);
+  box-shadow: 0 4px 16px rgba(15,23,42,0.07), 0 1px 3px rgba(15,23,42,0.05);
+  overflow: hidden;
+  transition: box-shadow 200ms ease-out, border-color 200ms ease-out, transform 200ms cubic-bezier(.2,.75,.2,1);
 }
+.annotation-comment-card:hover {
+  box-shadow: 0 8px 28px rgba(15,23,42,0.12);
+  border-color: color-mix(in srgb, var(--annotation-color, var(--accent)) 40%, rgba(217,225,236,0.9));
+  transform: translateY(-1px);
+}
+/* 顶部颜色条 */
 .annotation-comment-card::before {
   content: "";
-  position: absolute;
-  left: 0;
-  top: 10px;
-  bottom: 10px;
-  width: 3px;
-  border-radius: 999px;
+  display: block;
+  height: 3px;
   background: var(--annotation-color, var(--accent));
-  opacity: 0.7;
+  opacity: 0.75;
 }
-.annotation-comment-quote {
-  color: var(--muted);
-  font-size: 0.8rem;
-  margin: 0;
-  line-height: 1.35;
+/* 内容区 padding 包裹 */
+.annotation-comment-head,
+.annotation-comment-quote,
+.annotation-comment-body {
+  padding-left: 13px;
+  padding-right: 13px;
+}
+.annotation-comment-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding-top: 10px;
+}
+.annotation-comment-avatar {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--annotation-color, var(--accent)) 18%, rgba(37,99,235,0.1));
+  color: color-mix(in srgb, var(--annotation-color, var(--accent)) 80%, #1e293b);
+  font-size: 0.72rem;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--annotation-color, var(--accent)) 25%, rgba(217,225,236,0.8));
+}
+.annotation-comment-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.annotation-comment-username {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .annotation-comment-visibility {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  width: fit-content;
-  padding: 3px 8px;
+  padding: 2px 7px;
   border-radius: 999px;
-  background: rgba(37,99,235,0.08);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.annotation-comment-visibility.is-public {
+  background: rgba(20,184,166,0.1);
+  color: #0d9488;
+  border: 1px solid rgba(20,184,166,0.2);
+}
+.annotation-comment-visibility.is-private {
+  background: rgba(100,116,139,0.08);
   color: var(--muted);
-  font-size: 0.74rem;
-  font-weight: 600;
+  border: 1px solid rgba(100,116,139,0.16);
+}
+.annotation-comment-quote {
+  margin: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--muted);
+  border-left: 2px solid color-mix(in srgb, var(--annotation-color, var(--accent)) 55%, transparent);
+  padding-left: 10px;
+  margin-left: 13px;
+  margin-right: 13px;
+  padding-right: 0;
+  font-style: italic;
+  /* 超长引用截断为两行 */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .annotation-comment-body {
   margin: 0;
+  padding-bottom: 12px;
   white-space: pre-wrap;
-  line-height: 1.5;
-  font-size: 0.94rem;
+  line-height: 1.6;
+  font-size: 0.88rem;
+  color: var(--text);
 }
-.annotation-comment-card > * {
-  position: relative;
-  z-index: 1;
+@keyframes annotation-card-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.annotation-comment-card {
+  animation: annotation-card-in 220ms cubic-bezier(.2,.7,.2,1) both;
 }
 .annotation-auth-actions,
 .account-actions {

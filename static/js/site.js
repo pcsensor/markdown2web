@@ -631,6 +631,7 @@ function wireNoteAnnotations() {
 
       const articleRect = article.getBoundingClientRect();
       let lastBottom = 0;
+      let isFirst = true;
 
       comments
         .map((annotation) => ({
@@ -641,24 +642,44 @@ function wireNoteAnnotations() {
         .sort((left, right) => left.rect.top - right.rect.top)
         .forEach(({ annotation, rect }) => {
           const card = document.createElement('article');
-          card.className = 'annotation-comment-card interactive-card interactive-card-subtle';
+          card.className = 'annotation-comment-card';
           if (annotation.color) {
             card.style.setProperty('--annotation-color', annotation.color);
           }
 
-          const quote = document.createElement('p');
-          quote.className = 'annotation-comment-quote';
-          quote.textContent = `“${annotation.quote}”`;
+          // 头部：头像字母 + 用户名 + 可见性徽章
+          const head = document.createElement('div');
+          head.className = 'annotation-comment-head';
+
+          const avatar = document.createElement('span');
+          avatar.className = 'annotation-comment-avatar';
+          avatar.textContent = (annotation.username || '?')[0].toUpperCase();
+
+          const meta = document.createElement('div');
+          meta.className = 'annotation-comment-meta';
+
+          const username = document.createElement('span');
+          username.className = 'annotation-comment-username';
+          username.textContent = annotation.username || '';
 
           const visibility = document.createElement('span');
-          visibility.className = 'annotation-comment-visibility';
+          visibility.className = `annotation-comment-visibility ${annotation.visibility === 'public' ? 'is-public' : 'is-private'}`;
           visibility.textContent = annotation.visibility === 'public' ? '公开' : '私密';
 
+          meta.append(username, visibility);
+          head.append(avatar, meta);
+
+          // 引用原文
+          const quote = document.createElement('blockquote');
+          quote.className = 'annotation-comment-quote';
+          quote.textContent = annotation.quote;
+
+          // 评论正文
           const body = document.createElement('p');
           body.className = 'annotation-comment-body';
           body.textContent = annotation.comment;
 
-          card.append(quote, visibility, body);
+          card.append(head, quote, body);
           lane.appendChild(card);
 
           if (stackedQuery.matches) {
@@ -667,7 +688,8 @@ function wireNoteAnnotations() {
           }
 
           const naturalTop = Math.max(0, rect.top - articleRect.top);
-          const top = Math.max(naturalTop, lastBottom);
+          const top = Math.max(isFirst ? Math.min(naturalTop, 8) : naturalTop, lastBottom);
+          isFirst = false;
           card.style.top = `${top}px`;
           lastBottom = top + card.offsetHeight + 12;
         });
@@ -922,7 +944,9 @@ function wireNoteAnnotations() {
     button.addEventListener('click', () => closeCommentModal(null));
   });
 
-  root.addEventListener('mouseup', () => {
+  root.addEventListener('mouseup', (event) => {
+    // 忽略右键释放，避免与 contextmenu 冲突
+    if (event.button === 2) return;
     window.setTimeout(showSelectionToolbar, 0);
   });
   root.addEventListener('touchend', () => {
@@ -953,6 +977,7 @@ function wireNoteAnnotations() {
     return annotationElement;
   };
 
+  // 左键单击已有注释 → 打开操作面板
   root.addEventListener('click', (event) => {
     const annotationElement = annotationFromEvent(event);
     if (!annotationElement || !enabled) return;
@@ -961,30 +986,16 @@ function wireNoteAnnotations() {
     openOwnedAnnotationPanel(annotationElement);
   });
 
-  document.addEventListener('mousedown', (event) => {
+  // 右键点击已有注释 → 拦截浏览器菜单，打开操作面板
+  // 只监听文章根节点，避免影响页面其他区域的右键菜单
+  root.addEventListener('contextmenu', (event) => {
     const annotationElement = annotationFromEvent(event);
     if (!annotationElement) return;
-    if ('button' in event && event.button !== 2) return;
-    event.preventDefault();
-    event.stopPropagation();
-    if (typeof event.stopImmediatePropagation === 'function') {
-      event.stopImmediatePropagation();
-    }
+    // 只有启用批注时才拦截右键菜单
     if (!enabled) return;
-    openOwnedAnnotationPanel(annotationElement);
-  }, true);
-
-  document.addEventListener('contextmenu', (event) => {
-    const annotationElement = annotationFromEvent(event);
-    if (!annotationElement) return;
     event.preventDefault();
-    event.stopPropagation();
-    if (typeof event.stopImmediatePropagation === 'function') {
-      event.stopImmediatePropagation();
-    }
-    if (!enabled) return;
     openOwnedAnnotationPanel(annotationElement);
-  }, true);
+  });
 
   document.addEventListener('click', (event) => {
     if (toolbar.hidden) return;
