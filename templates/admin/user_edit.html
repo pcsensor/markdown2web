@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Manage User · {{ site_name }}{% endblock %}
+{% block content %}
+<section class="stack-header admin-header polished-admin-header">
+  <div>
+    <p class="eyebrow">Admin</p>
+    <h1>管理用户：{{ managed_user.username }}</h1>
+    <p class="muted">更新用户名、重置密码，或删除该读者账号。账号变更后会使其当前登录失效。</p>
+  </div>
+  <div class="admin-actions">
+    <a class="button secondary" href="/admin/users">⇠ 用户列表</a>
+    <a class="button secondary" href="/admin">后台首页</a>
+  </div>
+</section>
+
+{% match success %}
+  {% when Some with (message) %}
+    <p class="success-banner admin-banner">{{ message }}</p>
+  {% when None %}
+  {% endmatch %}
+
+<section class="admin-grid admin-user-detail-grid">
+  <div class="panel interactive-card admin-panel-stack">
+    <div class="panel-title-row">
+      <h2>{{ managed_user.username }}</h2>
+      <span class="panel-chip">reader</span>
+    </div>
+    <p class="muted">创建于 {{ managed_user.created_at }}</p>
+    <div class="admin-user-metrics">
+      <div class="account-pill admin-user-pill">
+        <strong>{{ managed_user.session_count }}</strong>
+        <span class="muted">活跃会话</span>
+      </div>
+      <div class="account-pill admin-user-pill">
+        <strong>{{ managed_user.annotation_count }}</strong>
+        <span class="muted">评论 / 高亮</span>
+      </div>
+    </div>
+    <p class="muted admin-form-hint">如果你重置密码或改名，该用户需要重新登录。已发布的评论/高亮会跟随新用户名迁移。</p>
+  </div>
+
+  <div class="panel wide interactive-card admin-panel-stack">
+    <div class="panel-title-row">
+      <h2>编辑账号</h2>
+      <span class="panel-chip">update</span>
+    </div>
+    {% match update_error %}
+      {% when Some with (message) %}
+        <p class="error-banner">{{ message }}</p>
+      {% when None %}
+      {% endmatch %}
+    <form action="/admin/users/{{ managed_user.route_key }}/update" method="post" class="stack-form">
+      <label>用户名<input type="text" name="username" value="{{ form_username }}" autocomplete="username" required /></label>
+      <label>新密码<input type="password" name="new_password" minlength="8" autocomplete="new-password" /></label>
+      <label>确认新密码<input type="password" name="confirm_password" minlength="8" autocomplete="new-password" /></label>
+      <button type="submit">保存账号变更</button>
+    </form>
+    <p class="muted admin-form-hint">如果只想改用户名，可以将密码留空；如果只想重置密码，请保持用户名不变。</p>
+
+    <div class="panel-title-row second">
+      <h2>删除账号</h2>
+      <span class="panel-chip">danger</span>
+    </div>
+    <form action="/admin/users/{{ managed_user.route_key }}/delete" method="post" class="stack-form admin-danger-zone">
+      <p class="muted">删除后会同步移除该用户的登录会话与评论/高亮数据，此操作不可撤销。</p>
+      <button type="submit" class="admin-danger-button">删除用户</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

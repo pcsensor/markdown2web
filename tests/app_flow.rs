@@ -158,6 +158,8 @@ async fn admin_auth_guard_and_save_note() {
     let html = String::from_utf8(body.to_vec()).unwrap();
     assert!(html.contains("修改管理员密码"));
     assert!(html.contains("action=\"/admin/password\""));
+    assert!(html.contains("href=\"/admin/users\""));
+    assert!(html.contains("用户管理"));
 
     let save_request = Request::builder()
         .method("POST")
@@ -342,6 +344,286 @@ async fn admin_can_change_password_and_old_password_stops_working() {
     let response = router.oneshot(new_password_login).await.unwrap();
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
     assert_eq!(response.headers().get(header::LOCATION).unwrap(), "/admin");
+}
+
+#[tokio::test]
+async fn admin_can_manage_public_users() {
+    let (_temp, _state, router) = setup().await;
+
+    let admin_login = Request::builder()
+        .method("POST")
+        .uri("/admin/login")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body(Body::from("username=admin&password=admin123456"))
+        .unwrap();
+    let response = router.clone().oneshot(admin_login).await.unwrap();
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let admin_cookie = response
+        .headers()
+        .get(header::SET_COOKIE)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+
+    let users_page = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/admin/users")
+                .header(header::COOKIE, &admin_cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(users_page.status(), StatusCode::OK);
+    let body = to_bytes(users_page.into_body(), usize::MAX).await.unwrap();
+    let html = String::from_utf8(body.to_vec()).unwrap();
+    assert!(html.contains("用户管理"));
+    assert!(html.contains("action=\"/admin/users\""));
+
+    let create_user = Request::builder()
+        .method("POST")
+        .uri("/admin/users")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::COOKIE, &admin_cookie)
+        .body(Body::from(
+            "username=reader-one&password=ReaderPass123&confirm_password=ReaderPass123",
+        ))
+        .unwrap();
+    let response = router.clone().oneshot(create_user).await.unwrap();
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(
+        response.headers().get(header::LOCATION).unwrap(),
+        "/admin/users/reader-one?status=created"
+    );
+
+    let create_second_user = Request::builder()
+        .method("POST")
+        .uri("/admin/users")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::COOKIE, &admin_cookie)
+        .body(Body::from(
+            "username=reader-two&password=ReaderPass123&confirm_password=ReaderPass123",
+        ))
+        .unwrap();
+    let response = router.clone().oneshot(create_second_user).await.unwrap();
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(
+        response.headers().get(header::LOCATION).unwrap(),
+        "/admin/users/reader-two?status=created"
+    );
+
+    let manage_page = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/admin/users/reader-one?status=created")
+                .header(header::COOKIE, &admin_cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(manage_page.status(), StatusCode::OK);
+    let body = to_bytes(manage_page.into_body(), usize::MAX).await.unwrap();
+    let html = String::from_utf8(body.to_vec()).unwrap();
+    assert!(html.contains("管理用户：reader-one"));
+    assert!(html.contains("action=\"/admin/users/reader-one/update\""));
+    assert!(html.contains("action=\"/admin/users/reader-one/delete\""));
+
+    let duplicate_update = Request::builder()
+        .method("POST")
+        .uri("/admin/users/reader-one/update")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::COOKIE, &admin_cookie)
+        .body(Body::from(
+            "username=reader-two&new_password=&confirm_password=",
+        ))
+        .unwrap();
+    let response = router.clone().oneshot(duplicate_update).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let html = String::from_utf8(body.to_vec()).unwrap();
+    assert!(html.contains("该用户名已被注册"));
+    assert!(html.contains("action=\"/admin/users/reader-one/update\""));
+
+    let reader_login = Request::builder()
+        .method("POST")
+        .uri("/account/login")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body(Body::from(
+            "username=reader-one&password=ReaderPass123&next=/notes/welcome",
+        ))
+        .unwrap();
+    let response = router.clone().oneshot(reader_login).await.unwrap();
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let reader_cookie = response
+        .headers()
+        .get(header::SET_COOKIE)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+
+    let create_annotation = Request::builder()
+        .method("POST")
+        .uri("/api/notes/welcome/annotations")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::COOKIE, &reader_cookie)
+        .body(Body::from(
+            json!({
+                "start_offset": 0,
+                "end_offset": 7,
+                "quote": "Welcome",
+                "comment": "admin managed comment",
+                "visibility": "public"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let response = router.clone().oneshot(create_annotation).await.unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let update_user = Request::builder()
+        .method("POST")
+        .uri("/admin/users/reader-one/update")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::COOKIE, &admin_cookie)
+        .body(Body::from(
+            "username=reader-prime&new_password=PrimePass123&confirm_password=PrimePass123",
+        ))
+        .unwrap();
+    let response = router.clone().oneshot(update_user).await.unwrap();
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(
+        response.headers().get(header::LOCATION).unwrap(),
+        "/admin/users/reader-prime?status=updated"
+    );
+
+    let stale_session_request = Request::builder()
+        .method("POST")
+        .uri("/api/notes/welcome/annotations")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::COOKIE, &reader_cookie)
+        .body(Body::from(
+            json!({
+                "start_offset": 8,
+                "end_offset": 10,
+                "quote": "to",
+                "comment": "should fail"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let response = router.clone().oneshot(stale_session_request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    let old_login = Request::builder()
+        .method("POST")
+        .uri("/account/login")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body(Body::from(
+            "username=reader-one&password=ReaderPass123&next=/notes/welcome",
+        ))
+        .unwrap();
+    let response = router.clone().oneshot(old_login).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let html = String::from_utf8(body.to_vec()).unwrap();
+    assert!(html.contains("用户名或密码错误"));
+
+    let new_login = Request::builder()
+        .method("POST")
+        .uri("/account/login")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body(Body::from(
+            "username=reader-prime&password=PrimePass123&next=/notes/welcome",
+        ))
+        .unwrap();
+    let response = router.clone().oneshot(new_login).await.unwrap();
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+
+    let public_annotations = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/notes/welcome/annotations")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(public_annotations.status(), StatusCode::OK);
+    let body = to_bytes(public_annotations.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let listed: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(listed["annotations"].as_array().unwrap().len(), 1);
+    assert_eq!(listed["annotations"][0]["username"], "reader-prime");
+
+    let delete_user = Request::builder()
+        .method("POST")
+        .uri("/admin/users/reader-prime/delete")
+        .header(header::COOKIE, &admin_cookie)
+        .body(Body::empty())
+        .unwrap();
+    let response = router.clone().oneshot(delete_user).await.unwrap();
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(
+        response.headers().get(header::LOCATION).unwrap(),
+        "/admin/users?status=deleted"
+    );
+
+    let users_page_after_delete = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/admin/users?status=deleted")
+                .header(header::COOKIE, &admin_cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(users_page_after_delete.status(), StatusCode::OK);
+    let body = to_bytes(users_page_after_delete.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let html = String::from_utf8(body.to_vec()).unwrap();
+    assert!(!html.contains("reader-prime"));
+    assert!(html.contains("用户已删除"));
+
+    let annotations_after_delete = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/notes/welcome/annotations")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = to_bytes(annotations_after_delete.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let listed: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(listed["annotations"].as_array().unwrap().len(), 0);
+
+    let deleted_login = Request::builder()
+        .method("POST")
+        .uri("/account/login")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body(Body::from(
+            "username=reader-prime&password=PrimePass123&next=/notes/welcome",
+        ))
+        .unwrap();
+    let response = router.oneshot(deleted_login).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let html = String::from_utf8(body.to_vec()).unwrap();
+    assert!(html.contains("用户名或密码错误"));
 }
 
 #[tokio::test]
@@ -793,6 +1075,29 @@ fn mascot_wiring_exists() {
 }
 
 #[test]
+fn admin_user_management_wiring_exists() {
+    let dashboard = fs::read_to_string("templates/admin/dashboard.html").unwrap();
+    let users = fs::read_to_string("templates/admin/users.html").unwrap();
+    let user_edit = fs::read_to_string("templates/admin/user_edit.html").unwrap();
+    let css = fs::read_to_string("static/css/app.css").unwrap();
+
+    assert!(dashboard.contains("href=\"/admin/users\""));
+    assert!(dashboard.contains("用户管理"));
+
+    assert!(users.contains("action=\"/admin/users\""));
+    assert!(users.contains("已注册用户"));
+    assert!(users.contains("managed_user.route_key"));
+
+    assert!(user_edit.contains("action=\"/admin/users/{{ managed_user.route_key }}/update\""));
+    assert!(user_edit.contains("action=\"/admin/users/{{ managed_user.route_key }}/delete\""));
+    assert!(user_edit.contains("删除用户"));
+
+    assert!(css.contains(".admin-users-grid"));
+    assert!(css.contains(".admin-user-row"));
+    assert!(css.contains(".admin-danger-button"));
+}
+
+#[test]
 fn annotation_wiring_exists() {
     let base = fs::read_to_string("templates/base.html").unwrap();
     let note = fs::read_to_string("templates/note.html").unwrap();
@@ -835,8 +1140,8 @@ fn annotation_wiring_exists() {
     assert!(js.contains("data-annotation-highlight"));
     assert!(js.contains("data-annotation-visibility"));
     assert!(js.contains("visibilitySelect.value"));
-    assert!(js.contains("document.addEventListener('mousedown'"));
-    assert!(js.contains("document.addEventListener('contextmenu'"));
+    assert!(js.contains("addEventListener('mousedown'"));
+    assert!(js.contains("addEventListener('contextmenu'"));
     assert!(js.contains("openOwnedAnnotationPanel"));
     assert!(js.contains("annotationFromEvent"));
     assert!(js.contains("button !== 2"));

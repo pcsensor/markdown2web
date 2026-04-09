@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}User Management · {{ site_name }}{% endblock %}
+{% block content %}
+<section class="stack-header admin-header polished-admin-header">
+  <div>
+    <p class="eyebrow">Admin</p>
+    <h1>用户管理</h1>
+    <p class="muted">查看网站注册用户，创建账号，并进入详情页执行重命名、密码重置或删除操作。</p>
+  </div>
+  <div class="admin-actions">
+    <a class="button secondary" href="/admin">⇠ 返回后台</a>
+  </div>
+</section>
+
+{% match success %}
+  {% when Some with (message) %}
+    <p class="success-banner admin-banner">{{ message }}</p>
+  {% when None %}
+  {% endmatch %}
+
+<section class="admin-grid admin-users-grid">
+  <div class="panel interactive-card admin-panel-stack">
+    <div class="panel-title-row">
+      <h2>新建用户</h2>
+      <span class="panel-chip">create</span>
+    </div>
+    {% match create_error %}
+      {% when Some with (message) %}
+        <p class="error-banner">{{ message }}</p>
+      {% when None %}
+      {% endmatch %}
+    <form action="/admin/users" method="post" class="stack-form">
+      <label>用户名<input type="text" name="username" value="{{ create_username }}" autocomplete="username" required /></label>
+      <label>初始密码<input type="password" name="password" minlength="8" autocomplete="new-password" required /></label>
+      <label>确认密码<input type="password" name="confirm_password" minlength="8" autocomplete="new-password" required /></label>
+      <button type="submit">创建并进入详情页</button>
+    </form>
+    <p class="muted admin-form-hint">后台创建的账号不会自动登录。密码至少需要 8 个字符。</p>
+  </div>
+
+  <div class="panel wide interactive-card">
+    <div class="panel-title-row">
+      <h2>已注册用户</h2>
+      <span class="panel-chip">{{ user_count }}</span>
+    </div>
+    {% if user_count == 0 %}
+      <p class="muted admin-empty-state">当前还没有注册用户。你可以先在左侧创建一个测试账号。</p>
+    {% else %}
+      <div class="stack-list compact">
+        {% for managed_user in users %}
+          <article class="list-card compact interactive-card admin-user-row">
+            <div class="admin-user-copy">
+              <div class="panel-title-row">
+                <h3>{{ managed_user.username }}</h3>
+                <span class="panel-chip">reader</span>
+              </div>
+              <p class="muted">创建于 {{ managed_user.created_at }}</p>
+              <div class="admin-user-metrics">
+                <div class="account-pill admin-user-pill">
+                  <strong>{{ managed_user.session_count }}</strong>
+                  <span class="muted">活跃会话</span>
+                </div>
+                <div class="account-pill admin-user-pill">
+                  <strong>{{ managed_user.annotation_count }}</strong>
+                  <span class="muted">评论 / 高亮</span>
+                </div>
+              </div>
+            </div>
+            <a class="button secondary" href="/admin/users/{{ managed_user.route_key }}">管理账号</a>
+          </article>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

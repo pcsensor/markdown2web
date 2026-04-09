@@ -17,7 +17,10 @@ use crate::{
         markdown::slugify,
     },
     error::{AppError, AppResult},
-    store::filesystem,
+    store::{
+        filesystem,
+        sqlite::{BuildEvent, ManagedPublicUser},
+    },
     web::auth,
 };
 
@@ -36,8 +39,9 @@ struct DashboardTemplate {
     site_name: String,
     username: String,
     notes: Vec<Note>,
-    build_events: Vec<crate::store::sqlite::BuildEvent>,
+    build_events: Vec<BuildEvent>,
     password_error: Option<String>,
+    public_user_count: usize,
 }
 
 #[derive(Template)]
@@ -47,6 +51,27 @@ struct NoteEditTemplate {
     username: String,
     mode: String,
     note: EditableNote,
+}
+
+#[derive(Template)]
+#[template(path = "admin/users.html")]
+struct UsersTemplate {
+    site_name: String,
+    users: Vec<ManagedPublicUser>,
+    user_count: usize,
+    create_username: String,
+    create_error: Option<String>,
+    success: Option<String>,
+}
+
+#[derive(Template)]
+#[template(path = "admin/user_edit.html")]
+struct UserEditTemplate {
+    site_name: String,
+    managed_user: ManagedPublicUser,
+    form_username: String,
+    update_error: Option<String>,
+    success: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -85,6 +110,25 @@ pub struct LoginStatusQuery {
 #[derive(Deserialize)]
 pub struct ChangePasswordForm {
     current_password: String,
+    new_password: String,
+    confirm_password: String,
+}
+
+#[derive(Default, Deserialize)]
+pub struct UserManagementStatusQuery {
+    status: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct CreatePublicUserForm {
+    username: String,
+    password: String,
+    confirm_password: String,
+}
+
+#[derive(Deserialize)]
+pub struct UpdatePublicUserForm {
+    username: String,
     new_password: String,
     confirm_password: String,
 }
@@ -186,6 +230,213 @@ pub async fn change_password(
         Redirect::to("/admin/login?password=updated"),
     )
         .into_response())
+}
+
+pub async fn users_page(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Query(query): Query<UserManagementStatusQuery>,
+) -> AppResult<Response> {
+    let Some(user) = auth::current_user(&jar, &state)? else {
+        return Ok(Redirect::to("/admin/login").into_response());
+    };
+    users_response(
+        &state,
+        user,
+        String::new(),
+        None,
+        users_success_message(query.status.as_deref()),
+    )
+    .await
+}
+
+pub async fn create_public_user(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Form(form): Form<CreatePublicUserForm>,
+) -> AppResult<Response> {
+    const MIN_PASSWORD_LENGTH: usize = 8;
+
+    let Some(user) = auth::current_user(&jar, &state)? else {
+        return Ok(Redirect::to("/admin/login").into_response());
+    };
+
+    let username = form.username.trim().to_string();
+    if username.is_empty() {
+        return users_response(
+            &state,
+            user,
+            username,
+            Some("用户名不能为空。".into()),
+            None,
+        )
+        .await;
+    }
+    if form.password.len() < MIN_PASSWORD_LENGTH {
+        return users_response(
+            &state,
+            user,
+            username,
+            Some(format!("密码至少需要 {MIN_PASSWORD_LENGTH} 个字符。")),
+            None,
+        )
+        .await;
+    }
+    if form.password != form.confirm_password {
+        return users_response(
+            &state,
+            user,
+            username,
+            Some("两次输入的密码不一致。".into()),
+            None,
+        )
+        .await;
+    }
+    if !state.db.create_public_user(&username, &form.password)? {
+        return users_response(
+            &state,
+            user,
+            username,
+            Some("该用户名已被注册。".into()),
+            None,
+        )
+        .await;
+    }
+
+    let route_key = state
+        .db
+        .public_user_summary(&username)?
+        .map(|managed_user| managed_user.route_key)
+        .ok_or_else(|| AppError::NotFound(format!("user {}", username)))?;
+    Ok(Redirect::to(&format!("/admin/users/{route_key}?status=created")).into_response())
+}
+
+pub async fn user_detail_page(
+    Path(username): Path<String>,
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Query(query): Query<UserManagementStatusQuery>,
+) -> AppResult<Response> {
+    let Some(user) = auth::current_user(&jar, &state)? else {
+        return Ok(Redirect::to("/admin/login").into_response());
+    };
+    user_detail_response(
+        &state,
+        user,
+        &username,
+        username.clone(),
+        None,
+        user_detail_success_message(query.status.as_deref()),
+    )
+    .await
+}
+
+pub async fn update_public_user(
+    Path(current_username): Path<String>,
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Form(form): Form<UpdatePublicUserForm>,
+) -> AppResult<Response> {
+    const MIN_PASSWORD_LENGTH: usize = 8;
+
+    let Some(user) = auth::current_user(&jar, &state)? else {
+        return Ok(Redirect::to("/admin/login").into_response());
+    };
+
+    let next_username = form.username.trim().to_string();
+    if next_username.is_empty() {
+        return user_detail_response(
+            &state,
+            user,
+            &current_username,
+            next_username,
+            Some("用户名不能为空。".into()),
+            None,
+        )
+        .await;
+    }
+
+    let next_password = if form.new_password.is_empty() {
+        None
+    } else {
+        if form.new_password.len() < MIN_PASSWORD_LENGTH {
+            return user_detail_response(
+                &state,
+                user,
+                &current_username,
+                next_username,
+                Some(format!("新密码至少需要 {MIN_PASSWORD_LENGTH} 个字符。")),
+                None,
+            )
+            .await;
+        }
+        if form.new_password != form.confirm_password {
+            return user_detail_response(
+                &state,
+                user,
+                &current_username,
+                next_username,
+                Some("两次输入的新密码不一致。".into()),
+                None,
+            )
+            .await;
+        }
+        Some(form.new_password.as_str())
+    };
+
+    if current_username == next_username && next_password.is_none() {
+        return user_detail_response(
+            &state,
+            user,
+            &current_username,
+            next_username,
+            Some("请至少修改用户名或重置密码。".into()),
+            None,
+        )
+        .await;
+    }
+
+    let updated_username =
+        match state
+            .db
+            .update_public_user(&current_username, &next_username, next_password)
+        {
+            Ok(Some(updated_username)) => updated_username,
+            Ok(None) => return Err(AppError::NotFound(format!("user {}", current_username))),
+            Err(AppError::BadRequest(message)) => {
+                return user_detail_response(
+                    &state,
+                    user,
+                    &current_username,
+                    next_username,
+                    Some(message),
+                    None,
+                )
+                .await;
+            }
+            Err(error) => return Err(error),
+        };
+
+    let route_key = state
+        .db
+        .public_user_summary(&updated_username)?
+        .map(|managed_user| managed_user.route_key)
+        .ok_or_else(|| AppError::NotFound(format!("user {}", updated_username)))?;
+    Ok(Redirect::to(&format!("/admin/users/{route_key}?status=updated")).into_response())
+}
+
+pub async fn delete_public_user(
+    Path(username): Path<String>,
+    State(state): State<AppState>,
+    jar: CookieJar,
+) -> AppResult<Response> {
+    let Some(_user) = auth::current_user(&jar, &state)? else {
+        return Ok(Redirect::to("/admin/login").into_response());
+    };
+    if !state.db.delete_public_user(&username)? {
+        return Err(AppError::NotFound(format!("user {}", username)));
+    }
+    Ok(Redirect::to("/admin/users?status=deleted").into_response())
 }
 
 pub async fn new_note_page(State(state): State<AppState>, jar: CookieJar) -> AppResult<Response> {
@@ -363,7 +614,63 @@ async fn dashboard_response(
         notes: site.all_notes(),
         build_events: state.db.recent_builds(12)?,
         password_error,
+        public_user_count: state.db.public_user_count()?,
     })
+}
+
+async fn users_response(
+    state: &AppState,
+    _admin_user: String,
+    create_username: String,
+    create_error: Option<String>,
+    success: Option<String>,
+) -> AppResult<Response> {
+    let users = state.db.list_public_users()?;
+    let user_count = users.len();
+    render(UsersTemplate {
+        site_name: state.config.site_name.clone(),
+        users,
+        user_count,
+        create_username,
+        create_error,
+        success,
+    })
+}
+
+async fn user_detail_response(
+    state: &AppState,
+    _admin_user: String,
+    managed_username: &str,
+    form_username: String,
+    update_error: Option<String>,
+    success: Option<String>,
+) -> AppResult<Response> {
+    let managed_user = state
+        .db
+        .public_user_summary(managed_username)?
+        .ok_or_else(|| AppError::NotFound(format!("user {}", managed_username)))?;
+    render(UserEditTemplate {
+        site_name: state.config.site_name.clone(),
+        managed_user,
+        form_username,
+        update_error,
+        success,
+    })
+}
+
+fn users_success_message(status: Option<&str>) -> Option<String> {
+    match status {
+        Some("deleted") => Some("用户已删除，相关公开登录会话与评论数据也已清理。".into()),
+        _ => None,
+    }
+}
+
+fn user_detail_success_message(status: Option<&str>) -> Option<String> {
+    match status {
+        Some("created") => Some("用户已创建。你现在可以继续调整用户名或重置密码。".into()),
+        Some("updated") => Some("账号变更已保存，该用户需要重新登录。".into()),
+        _ => None,
+    }
 }
 
 fn render<T: Template>(template: T) -> AppResult<Response> {

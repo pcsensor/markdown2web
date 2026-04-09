@@ -36,6 +36,15 @@ pub struct NoteAnnotation {
     pub updated_at: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct ManagedPublicUser {
+    pub username: String,
+    pub route_key: String,
+    pub created_at: String,
+    pub session_count: usize,
+    pub annotation_count: usize,
+}
+
 pub struct NewAnnotation<'a> {
     pub username: &'a str,
     pub note_slug: &'a str,
@@ -125,6 +134,10 @@ impl AppDatabase {
     }
 
     pub fn register_public_user(&self, username: &str, password: &str) -> AppResult<bool> {
+        self.create_public_user(username, password)
+    }
+
+    pub fn create_public_user(&self, username: &str, password: &str) -> AppResult<bool> {
         let conn = self.conn.lock().expect("db mutex poisoned");
         let exists: Option<String> = conn
             .query_row(
@@ -142,6 +155,48 @@ impl AppDatabase {
             params![username, hash, Utc::now().to_rfc3339()],
         )?;
         Ok(true)
+    }
+
+    pub fn public_user_count(&self) -> AppResult<usize> {
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        let count = conn.query_row("SELECT COUNT(*) FROM users", [], |row| row.get::<_, i64>(0))?;
+        Ok(count as usize)
+    }
+
+    pub fn list_public_users(&self) -> AppResult<Vec<ManagedPublicUser>> {
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        let mut stmt = conn.prepare(
+            r#"
+            SELECT
+                u.username,
+                u.created_at,
+                (SELECT COUNT(*) FROM user_sessions s WHERE s.username = u.username) AS session_count,
+                (SELECT COUNT(*) FROM annotations a WHERE a.username = u.username) AS annotation_count
+            FROM users u
+            ORDER BY u.created_at DESC, u.username ASC
+            "#,
+        )?;
+        let rows = stmt.query_map([], managed_public_user_from_row)?;
+        Ok(rows.filter_map(Result::ok).collect())
+    }
+
+    pub fn public_user_summary(&self, username: &str) -> AppResult<Option<ManagedPublicUser>> {
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        conn.query_row(
+            r#"
+            SELECT
+                u.username,
+                u.created_at,
+                (SELECT COUNT(*) FROM user_sessions s WHERE s.username = u.username) AS session_count,
+                (SELECT COUNT(*) FROM annotations a WHERE a.username = u.username) AS annotation_count
+            FROM users u
+            WHERE u.username = ?1
+            "#,
+            params![username],
+            managed_public_user_from_row,
+        )
+        .optional()
+        .map_err(Into::into)
     }
 
     pub fn verify_user(&self, username: &str, password: &str) -> AppResult<bool> {
@@ -264,6 +319,77 @@ impl AppDatabase {
             params![username],
         )?;
         Ok(())
+    }
+
+    pub fn update_public_user(
+        &self,
+        current_username: &str,
+        next_username: &str,
+        next_password: Option<&str>,
+    ) -> AppResult<Option<String>> {
+        let mut conn = self.conn.lock().expect("db mutex poisoned");
+        let current_hash: Option<String> = conn
+            .query_row(
+                "SELECT password_hash FROM users WHERE username = ?1",
+                params![current_username],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let Some(current_hash) = current_hash else {
+            return Ok(None);
+        };
+
+        if current_username != next_username {
+            let taken: Option<String> = conn
+                .query_row(
+                    "SELECT username FROM users WHERE username = ?1",
+                    params![next_username],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            if taken.is_some() {
+                return Err(AppError::BadRequest("该用户名已被注册。".into()));
+            }
+        }
+
+        let password_hash = match next_password {
+            Some(password) => hash_password(password)?,
+            None => current_hash,
+        };
+
+        let tx = conn.transaction()?;
+        tx.execute(
+            "DELETE FROM user_sessions WHERE username = ?1",
+            params![current_username],
+        )?;
+        tx.execute(
+            "UPDATE users SET username = ?1, password_hash = ?2 WHERE username = ?3",
+            params![next_username, password_hash, current_username],
+        )?;
+        if current_username != next_username {
+            tx.execute(
+                "UPDATE annotations SET username = ?1 WHERE username = ?2",
+                params![next_username, current_username],
+            )?;
+        }
+        tx.commit()?;
+        Ok(Some(next_username.to_string()))
+    }
+
+    pub fn delete_public_user(&self, username: &str) -> AppResult<bool> {
+        let mut conn = self.conn.lock().expect("db mutex poisoned");
+        let tx = conn.transaction()?;
+        tx.execute(
+            "DELETE FROM user_sessions WHERE username = ?1",
+            params![username],
+        )?;
+        tx.execute(
+            "DELETE FROM annotations WHERE username = ?1",
+            params![username],
+        )?;
+        let deleted = tx.execute("DELETE FROM users WHERE username = ?1", params![username])?;
+        tx.commit()?;
+        Ok(deleted > 0)
     }
 
     pub fn list_visible_annotations(
@@ -439,6 +565,20 @@ fn annotation_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<NoteAnnotati
     })
 }
 
+fn managed_public_user_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ManagedPublicUser> {
+    let username: String = row.get(0)?;
+    Ok(ManagedPublicUser {
+        route_key: percent_encode_component(&username),
+        username,
+        created_at: row
+            .get::<_, String>(1)
+            .map(|s| time::format_cst(&s))
+            .unwrap_or_default(),
+        session_count: row.get::<_, i64>(2)? as usize,
+        annotation_count: row.get::<_, i64>(3)? as usize,
+    })
+}
+
 fn ensure_annotations_visibility_column(conn: &Connection) -> AppResult<()> {
     let mut stmt = conn.prepare("PRAGMA table_info(annotations)")?;
     let mut rows = stmt.query([])?;
@@ -460,4 +600,29 @@ fn ensure_annotations_visibility_column(conn: &Connection) -> AppResult<()> {
     }
 
     Ok(())
+}
+
+fn percent_encode_component(value: &str) -> String {
+    let mut encoded = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                encoded.push(byte as char)
+            }
+            _ => {
+                encoded.push('%');
+                encoded.push(
+                    char::from_digit((byte >> 4) as u32, 16)
+                        .unwrap()
+                        .to_ascii_uppercase(),
+                );
+                encoded.push(
+                    char::from_digit((byte & 0x0F) as u32, 16)
+                        .unwrap()
+                        .to_ascii_uppercase(),
+                );
+            }
+        }
+    }
+    encoded
 }

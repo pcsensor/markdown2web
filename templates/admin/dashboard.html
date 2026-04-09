@@ -5,10 +5,11 @@
   <div>
     <p class="eyebrow">Admin</p>
     <h1>欢迎，{{ username }}</h1>
-    <p class="muted">管理内容、上传资源，并触发构建更新。</p>
+    <p class="muted">管理内容、读者账号、上传资源，并触发构建更新。</p>
   </div>
   <div class="admin-actions">
     <a class="button secondary" href="/admin/notes/new">✦ 新建笔记</a>
+    <a class="button secondary" href="/admin/users">👥 用户管理（{{ public_user_count }}）</a>
     <form action="/admin/rebuild" method="post"><button type="submit">↻ 手动重建</button></form>
     <form action="/admin/logout" method="post"><button class="secondary" type="submit">⇠ 退出</button></form>
   </div>

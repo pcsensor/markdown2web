@@ -1032,16 +1032,20 @@ function wireNoteAnnotations() {
     if (enabled) openOwnedAnnotationPanel(annotationElement);
   });
 
-  // 右键点击已有注释 → 拦截浏览器菜单，打开操作面板
-  // 只监听文章根节点，避免影响页面其他区域的右键菜单
-  root.addEventListener('contextmenu', (event) => {
+  document.addEventListener('mousedown', (event) => {
+    if (event.button !== 2) return;
     const annotationElement = annotationFromEvent(event);
-    if (!annotationElement) return;
-    // 只有启用批注时才拦截右键菜单
-    if (!enabled) return;
+    if (!annotationElement || !enabled) return;
+    event.preventDefault();
+  }, true);
+
+  // 右键点击已有注释 → 在捕获阶段拦截浏览器菜单并打开操作面板
+  document.addEventListener('contextmenu', (event) => {
+    const annotationElement = annotationFromEvent(event);
+    if (!annotationElement || !enabled) return;
     event.preventDefault();
     openOwnedAnnotationPanel(annotationElement);
-  });
+  }, true);
 
   // 单击评论卡片 → 闪烁文章内对应注释文字
   lane.addEventListener('click', (event) => {
