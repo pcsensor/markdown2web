@@ -1,12 +1,12 @@
 use std::{path::Path, sync::Mutex};
 
 use argon2::{
+    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
-    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
 };
 use chrono::Utc;
-use rand::{Rng, distributions::Alphanumeric};
-use rusqlite::{Connection, OptionalExtension, params};
+use rand::{distributions::Alphanumeric, Rng};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 
 use crate::{
@@ -470,12 +470,46 @@ impl AppDatabase {
         annotation_by_id(&conn, id, username)
     }
 
+    pub fn update_annotation_by_admin(
+        &self,
+        id: i64,
+        color: Option<&str>,
+        comment: Option<&str>,
+        visibility: &str,
+    ) -> AppResult<Option<NoteAnnotation>> {
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        let existing: Option<(String, String)> = conn
+            .query_row(
+                "SELECT username, note_slug FROM annotations WHERE id = ?1",
+                params![id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        let Some((username, _note_slug)) = existing else {
+            return Ok(None);
+        };
+        let updated = conn.execute(
+            "UPDATE annotations SET color = ?1, comment = ?2, visibility = ?3, updated_at = ?4 WHERE id = ?5",
+            params![color, comment, visibility, Utc::now().to_rfc3339(), id],
+        )?;
+        if updated == 0 {
+            return Ok(None);
+        }
+        annotation_by_id(&conn, id, &username)
+    }
+
     pub fn delete_annotation(&self, id: i64, username: &str) -> AppResult<bool> {
         let conn = self.conn.lock().expect("db mutex poisoned");
         let deleted = conn.execute(
             "DELETE FROM annotations WHERE id = ?1 AND username = ?2",
             params![id, username],
         )?;
+        Ok(deleted > 0)
+    }
+
+    pub fn delete_annotation_by_admin(&self, id: i64) -> AppResult<bool> {
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        let deleted = conn.execute("DELETE FROM annotations WHERE id = ?1", params![id])?;
         Ok(deleted > 0)
     }
 

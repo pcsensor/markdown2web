@@ -52,3 +52,15 @@ pub fn current_public_user(jar: &CookieJar, state: &AppState) -> AppResult<Optio
         None => Ok(None),
     }
 }
+
+/// Unified viewer: tries public user first, then admin user.
+/// Returns (username, is_admin) tuple.
+pub fn current_viewer(jar: &CookieJar, state: &AppState) -> AppResult<Option<(String, bool)>> {
+    if let Some(username) = current_public_user(jar, state)? {
+        return Ok(Some((username, false)));
+    }
+    if let Some(username) = current_user(jar, state)? {
+        return Ok(Some((username, true)));
+    }
+    Ok(None)
+}

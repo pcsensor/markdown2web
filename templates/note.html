@@ -32,6 +32,7 @@
     data-note-slug="{{ note.slug }}"
     data-annotation-enabled="{% if annotations_enabled %}true{% else %}false{% endif %}"
     data-viewer-username="{{ viewer_username }}"
+    data-is-admin="{% if is_admin %}true{% else %}false{% endif %}"
     data-account-url="/account?next=/notes/{{ note.slug }}"
   >
     <div class="note-article-body" data-annotation-root>

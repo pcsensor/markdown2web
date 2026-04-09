@@ -193,11 +193,12 @@ pub async fn list_annotations(
     jar: CookieJar,
 ) -> AppResult<Json<AnnotationListResponse>> {
     ensure_published_note(&state, &slug).await?;
-    let username = auth::current_public_user(&jar, &state)?;
+    let (username, _is_admin) = auth::current_viewer(&jar, &state)?.unwrap_or_default();
+    let viewer = if username.is_empty() { None } else { Some(username) };
     Ok(Json(AnnotationListResponse {
         annotations: state
             .db
-            .list_visible_annotations(&slug, username.as_deref())?,
+            .list_visible_annotations(&slug, viewer.as_deref())?,
     }))
 }
 
@@ -208,7 +209,8 @@ pub async fn create_annotation(
     Json(payload): Json<CreateAnnotationPayload>,
 ) -> AppResult<Response> {
     ensure_published_note(&state, &slug).await?;
-    let username = require_public_user(&jar, &state)?;
+    let (username, _is_admin) = auth::current_viewer(&jar, &state)?
+        .ok_or(AppError::Unauthorized)?;
     validate_offsets(payload.start_offset, payload.end_offset)?;
     let quote = payload.quote.trim().to_string();
     if quote.is_empty() {
@@ -241,7 +243,8 @@ pub async fn update_annotation(
     jar: CookieJar,
     Json(payload): Json<UpdateAnnotationPayload>,
 ) -> AppResult<Json<NoteAnnotation>> {
-    let username = require_public_user(&jar, &state)?;
+    let (username, is_admin) = auth::current_viewer(&jar, &state)?
+        .ok_or(AppError::Unauthorized)?;
     let color = normalize_color(payload.color)?;
     let comment = normalize_comment(payload.comment);
     if color.is_none() && comment.is_none() {
@@ -250,16 +253,12 @@ pub async fn update_annotation(
         ));
     }
     let visibility = normalize_visibility(payload.visibility, comment.is_some())?;
-    let annotation = state
-        .db
-        .update_annotation(
-            id,
-            &username,
-            color.as_deref(),
-            comment.as_deref(),
-            &visibility,
-        )?
-        .ok_or_else(|| AppError::NotFound(format!("annotation {}", id)))?;
+    let annotation = if is_admin {
+        state.db.update_annotation_by_admin(id, color.as_deref(), comment.as_deref(), &visibility)?
+    } else {
+        state.db.update_annotation(id, &username, color.as_deref(), comment.as_deref(), &visibility)?
+    }
+    .ok_or_else(|| AppError::NotFound(format!("annotation {}", id)))?;
     Ok(Json(annotation))
 }
 
@@ -268,15 +267,17 @@ pub async fn delete_annotation(
     State(state): State<AppState>,
     jar: CookieJar,
 ) -> AppResult<StatusCode> {
-    let username = require_public_user(&jar, &state)?;
-    if !state.db.delete_annotation(id, &username)? {
+    let (username, is_admin) = auth::current_viewer(&jar, &state)?
+        .ok_or(AppError::Unauthorized)?;
+    let deleted = if is_admin {
+        state.db.delete_annotation_by_admin(id)?
+    } else {
+        state.db.delete_annotation(id, &username)?
+    };
+    if !deleted {
         return Err(AppError::NotFound(format!("annotation {}", id)));
     }
     Ok(StatusCode::NO_CONTENT)
-}
-
-fn require_public_user(jar: &CookieJar, state: &AppState) -> AppResult<String> {
-    auth::current_public_user(jar, state)?.ok_or(AppError::Unauthorized)
 }
 
 async fn ensure_published_note(state: &AppState, slug: &str) -> AppResult<()> {

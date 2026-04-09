@@ -344,6 +344,7 @@ function wireNoteAnnotations() {
   const noteSlug = article.dataset.noteSlug;
   const accountUrl = article.dataset.accountUrl || '/account';
   const viewerUsername = article.dataset.viewerUsername || '';
+  const isAdmin = article.dataset.isAdmin === 'true';
   const enabled = article.dataset.annotationEnabled === 'true';
   const highlightButton = toolbar.querySelector('[data-annotation-highlight]');
   const commentButton = toolbar.querySelector('[data-annotation-comment]');
@@ -367,7 +368,7 @@ function wireNoteAnnotations() {
   };
 
   const isOwnedAnnotation = (annotation) =>
-    Boolean(annotation) && enabled && annotation.username === viewerUsername;
+    Boolean(annotation) && enabled && (isAdmin || annotation.username === viewerUsername);
 
   const targetElement = (target) => {
     if (target instanceof Element) return target;

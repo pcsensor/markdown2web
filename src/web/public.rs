@@ -45,6 +45,7 @@ struct NoteTemplate {
     viewer: Option<String>,
     viewer_username: String,
     annotations_enabled: bool,
+    is_admin: bool,
 }
 
 #[derive(Template)]
@@ -114,7 +115,8 @@ pub async fn note_detail(
             })
         })
         .collect();
-    let viewer = auth::current_public_user(&jar, &state)?;
+    let (viewer, is_admin) = auth::current_viewer(&jar, &state)?.unzip();
+    let is_admin = is_admin.unwrap_or(false);
     render(NoteTemplate {
         site_name: state.config.site_name.clone(),
         note,
@@ -122,6 +124,7 @@ pub async fn note_detail(
         annotations_enabled: viewer.is_some(),
         viewer_username: viewer.clone().unwrap_or_default(),
         viewer,
+        is_admin,
     })
 }
 
