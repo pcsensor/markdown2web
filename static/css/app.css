@@ -872,11 +872,17 @@ select:focus-visible {
 }
 .hero-stat strong { display: block; font-size: 1.15rem; }
 .hero-stat span { color: var(--muted); font-size: 0.9rem; }
-.note-layout { display: grid; grid-template-columns: minmax(0, 1fr) 260px 300px; gap: 20px; align-items: start; }
-.note-article { position: relative; overflow: visible; }
+.note-layout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr) 300px;
+  grid-template-areas: "sidebar article rail";
+  gap: 20px;
+  align-items: start;
+}
+.note-article { grid-area: article; position: relative; overflow: visible; }
 .note-article-body { position: relative; z-index: 1; }
-.note-sidebar { display: grid; gap: 16px; }
-.annotation-rail { position: relative; min-width: 0; }
+.note-sidebar { grid-area: sidebar; display: grid; gap: 16px; }
+.annotation-rail { grid-area: rail; position: relative; min-width: 0; }
 .annotation-rail-card {
   position: sticky;
   top: 96px;
@@ -1501,13 +1507,20 @@ button.secondary, .button.secondary {
 
 @media (max-width: 980px) {
   .hero-grid,
-  .note-layout,
   .admin-grid,
   .editor-grid,
   .auth-grid,
   .account-grid,
   .footer-row {
     grid-template-columns: 1fr;
+  }
+
+  .note-layout {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "article"
+      "sidebar"
+      "rail";
   }
 
   .search-panel { grid-template-columns: 1fr; }

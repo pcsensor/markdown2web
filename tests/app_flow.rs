@@ -1032,6 +1032,20 @@ fn note_sidebar_spacing_and_toc_hover_styles_exist() {
 }
 
 #[test]
+fn note_layout_places_sidebar_left_article_center_and_rail_right() {
+    let css = fs::read_to_string("static/css/app.css").unwrap();
+    assert!(css.contains(".note-layout {\n  display: grid;"));
+    assert!(css.contains("grid-template-columns: 260px minmax(0, 1fr) 300px;"));
+    assert!(css.contains("grid-template-areas: \"sidebar article rail\";"));
+    assert!(css.contains(".note-article { grid-area: article;"));
+    assert!(css.contains(".note-sidebar { grid-area: sidebar;"));
+    assert!(css.contains(".annotation-rail { grid-area: rail;"));
+    assert!(
+        css.contains("grid-template-areas:\n      \"article\"\n      \"sidebar\"\n      \"rail\";")
+    );
+}
+
+#[test]
 fn mascot_wiring_exists() {
     let home = fs::read_to_string("templates/home.html").unwrap();
     let css = fs::read_to_string("static/css/app.css").unwrap();
