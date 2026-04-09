@@ -64,9 +64,10 @@ async fn home_and_note_routes_render_content() {
     assert!(html.contains("reading-progress"));
     assert!(html.contains("/static/js/site.js"));
     assert!(html.contains("cursor-beacon"));
-    assert!(html.contains("hero-panel panel interactive-card hero-particle-panel"));
-    assert!(html.contains("data-particle-field"));
-    assert!(html.contains("hero-particle-canvas"));
+    assert!(html.contains("hero-panel panel interactive-card hero-orb-panel"));
+    assert!(html.contains("data-orbital-focus"));
+    assert!(html.contains("hero-orb-module"));
+    assert!(!html.contains("hero-particle-canvas"));
     assert!(html.contains("metric-card interactive-card interactive-card-subtle"));
 
     let response = router
@@ -299,21 +300,29 @@ fn note_sidebar_spacing_and_toc_hover_styles_exist() {
 }
 
 #[test]
-fn hero_particle_stage_wiring_exists() {
+fn hero_orb_module_wiring_exists() {
     let home = fs::read_to_string("templates/home.html").unwrap();
     let css = fs::read_to_string("static/css/app.css").unwrap();
     let js = fs::read_to_string("static/js/site.js").unwrap();
 
-    assert!(home.contains("hero-particle-stage\" data-particle-field"));
-    assert!(home.contains("hero-particle-canvas"));
-    assert!(css.contains(".hero-particle-stage"));
-    assert!(css.contains("min-height: 460px;"));
-    assert!(css.contains("z-index: 0;"));
-    assert!(css.contains("inset: -8% -12% -8% 0;"));
-    assert!(js.contains("wireHeroParticles"));
-    assert!(js.contains("closest('.hero-particle-panel')"));
-    assert!(js.contains("state.clickImpulse"));
-    assert!(js.contains("scheduleAmbientBurst"));
-    assert!(js.contains("randomRange(5.2, 8.2)"));
-    assert!(js.contains("* 0.0085"));
+    assert!(home.contains("hero-orb-panel\" data-orbital-focus"));
+    assert!(home.contains("hero-orb-scene"));
+    assert!(home.contains("hero-orb-module"));
+    assert!(home.contains("hero-orb-glow hero-orb-glow-a"));
+    assert!(css.contains(".hero-orb-panel"));
+    assert!(css.contains("--orb-zone-size"));
+    assert!(css.contains("--orb-active: 0.28;"));
+    assert!(css.contains(".hero-orb-panel::after"));
+    assert!(css.contains(".hero-orb-module"));
+    assert!(css.contains(".hero-panel-copy-block"));
+    assert!(css.contains(".hero-orb-panel.is-orb-pulsing .hero-orb-pulse"));
+    assert!(js.contains("wireOrbitalFocus"));
+    assert!(js.contains("querySelectorAll('[data-orbital-focus]')"));
+    assert!(js.contains("const restingActive = 0.28;"));
+    assert!(js.contains("is-orb-static"));
+    assert!(js.contains("is-orb-pulsing"));
+    assert!(js.contains("ResizeObserver"));
+    assert!(!home.contains("hero-particle-stage"));
+    assert!(!js.contains("wireHeroParticles"));
+    assert!(!css.contains(".hero-particle-stage"));
 }
