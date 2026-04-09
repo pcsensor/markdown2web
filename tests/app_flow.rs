@@ -10,6 +10,7 @@ use markdown2web::{
     config::AppConfig,
     store::{filesystem, sqlite::AppDatabase},
 };
+use serde_json::{Value, json};
 use tempfile::TempDir;
 use tower::util::ServiceExt;
 
@@ -84,6 +85,11 @@ async fn home_and_note_routes_render_content() {
     let html = String::from_utf8(body.to_vec()).unwrap();
     assert!(html.contains("/notes/architecture"));
     assert!(html.contains("sidebar-card interactive-card sidebar-panel"));
+    assert!(html.contains("data-note-article"));
+    assert!(html.contains("data-annotation-toolbar"));
+    assert!(html.contains("data-annotation-comment-lane"));
+    assert!(html.contains("data-annotation-enabled=\"false\""));
+    assert!(html.contains("/account?next=/notes/welcome"));
 }
 
 #[tokio::test]
@@ -236,7 +242,7 @@ async fn admin_can_change_password_and_old_password_stops_working() {
         .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
         .header(header::COOKIE, &cookie)
         .body(Body::from(
-            "current_password=Pcsensor1121%40&new_password=short&confirm_password=short",
+            "current_password=admin123456&new_password=short&confirm_password=short",
         ))
         .unwrap();
     let response = router.clone().oneshot(too_short_change).await.unwrap();
@@ -251,7 +257,7 @@ async fn admin_can_change_password_and_old_password_stops_working() {
         .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
         .header(header::COOKIE, &cookie)
         .body(Body::from(
-            "current_password=Pcsensor1121%40&new_password=NewSecurePass123&confirm_password=OtherSecurePass123",
+            "current_password=admin123456&new_password=NewSecurePass123&confirm_password=OtherSecurePass123",
         ))
         .unwrap();
     let response = router.clone().oneshot(mismatch_change).await.unwrap();
@@ -266,7 +272,7 @@ async fn admin_can_change_password_and_old_password_stops_working() {
         .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
         .header(header::COOKIE, &cookie)
         .body(Body::from(
-            "current_password=Pcsensor1121%40&new_password=NewSecurePass123&confirm_password=NewSecurePass123",
+            "current_password=admin123456&new_password=NewSecurePass123&confirm_password=NewSecurePass123",
         ))
         .unwrap();
     let response = router.clone().oneshot(change_password).await.unwrap();
@@ -336,6 +342,273 @@ async fn admin_can_change_password_and_old_password_stops_working() {
     let response = router.oneshot(new_password_login).await.unwrap();
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
     assert_eq!(response.headers().get(header::LOCATION).unwrap(), "/admin");
+}
+
+#[tokio::test]
+async fn public_user_auth_and_annotation_api_flow() {
+    let (_temp, _state, router) = setup().await;
+
+    let public_list_before_login = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/notes/welcome/annotations")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(public_list_before_login.status(), StatusCode::OK);
+    let body = to_bytes(public_list_before_login.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let listed: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(listed["annotations"].as_array().unwrap().len(), 0);
+
+    let unauthorized_create = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/notes/welcome/annotations")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "start_offset": 0,
+                        "end_offset": 7,
+                        "quote": "Welcome",
+                        "comment": "公开评论",
+                        "visibility": "public"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unauthorized_create.status(), StatusCode::UNAUTHORIZED);
+
+    let register_request = Request::builder()
+        .method("POST")
+        .uri("/account/register")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body(Body::from(
+            "username=alice&password=ReaderPass123&next=/notes/welcome",
+        ))
+        .unwrap();
+    let register_response = router.clone().oneshot(register_request).await.unwrap();
+    assert_eq!(register_response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(
+        register_response.headers().get(header::LOCATION).unwrap(),
+        "/notes/welcome"
+    );
+    let user_cookie = register_response
+        .headers()
+        .get(header::SET_COOKIE)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    assert!(user_cookie.contains("m2w_user_session="));
+
+    let duplicate_register = Request::builder()
+        .method("POST")
+        .uri("/account/register")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body(Body::from(
+            "username=alice&password=ReaderPass123&next=/account",
+        ))
+        .unwrap();
+    let duplicate_response = router.clone().oneshot(duplicate_register).await.unwrap();
+    assert_eq!(duplicate_response.status(), StatusCode::OK);
+    let body = to_bytes(duplicate_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let html = String::from_utf8(body.to_vec()).unwrap();
+    assert!(html.contains("该用户名已被注册"));
+
+    let note_response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/notes/welcome")
+                .header(header::COOKIE, &user_cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(note_response.status(), StatusCode::OK);
+    let body = to_bytes(note_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let html = String::from_utf8(body.to_vec()).unwrap();
+    assert!(html.contains("当前已登录"));
+    assert!(html.contains("alice"));
+    assert!(html.contains("data-annotation-enabled=\"true\""));
+
+    let create_request = Request::builder()
+        .method("POST")
+        .uri("/api/notes/welcome/annotations")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::COOKIE, &user_cookie)
+        .body(Body::from(
+            json!({
+                "start_offset": 0,
+                "end_offset": 7,
+                "quote": "Welcome",
+                "color": "#fde68a",
+                "comment": "首段重点",
+                "visibility": "public"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let create_response = router.clone().oneshot(create_request).await.unwrap();
+    assert_eq!(create_response.status(), StatusCode::CREATED);
+    let body = to_bytes(create_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let created: Value = serde_json::from_slice(&body).unwrap();
+    let annotation_id = created["id"].as_i64().unwrap();
+    assert_eq!(created["comment"], "首段重点");
+    assert_eq!(created["visibility"], "public");
+
+    let list_response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/notes/welcome/annotations")
+                .header(header::COOKIE, &user_cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(list_response.status(), StatusCode::OK);
+    let body = to_bytes(list_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let listed: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(listed["annotations"].as_array().unwrap().len(), 1);
+
+    let public_list = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/notes/welcome/annotations")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(public_list.status(), StatusCode::OK);
+    let body = to_bytes(public_list.into_body(), usize::MAX).await.unwrap();
+    let listed: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(listed["annotations"].as_array().unwrap().len(), 1);
+    assert_eq!(listed["annotations"][0]["visibility"], "public");
+
+    let update_request = Request::builder()
+        .method("PUT")
+        .uri(format!("/api/annotations/{annotation_id}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::COOKIE, &user_cookie)
+        .body(Body::from(
+            json!({
+                "color": "#bfdbfe",
+                "comment": "更新后的评论",
+                "visibility": "private"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let update_response = router.clone().oneshot(update_request).await.unwrap();
+    assert_eq!(update_response.status(), StatusCode::OK);
+    let body = to_bytes(update_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let updated: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(updated["comment"], "更新后的评论");
+    assert_eq!(updated["color"], "#bfdbfe");
+    assert_eq!(updated["visibility"], "private");
+
+    let public_list_after_private = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/notes/welcome/annotations")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(public_list_after_private.status(), StatusCode::OK);
+    let body = to_bytes(public_list_after_private.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let listed: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(listed["annotations"].as_array().unwrap().len(), 0);
+
+    let delete_response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/api/annotations/{annotation_id}"))
+                .header(header::COOKIE, &user_cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(delete_response.status(), StatusCode::NO_CONTENT);
+
+    let list_after_delete = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/notes/welcome/annotations")
+                .header(header::COOKIE, &user_cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(list_after_delete.status(), StatusCode::OK);
+    let body = to_bytes(list_after_delete.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let listed: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(listed["annotations"].as_array().unwrap().len(), 0);
+
+    let logout_request = Request::builder()
+        .method("POST")
+        .uri("/account/logout")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::COOKIE, &user_cookie)
+        .body(Body::from("next=/notes/welcome"))
+        .unwrap();
+    let logout_response = router.clone().oneshot(logout_request).await.unwrap();
+    assert_eq!(logout_response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(
+        logout_response.headers().get(header::LOCATION).unwrap(),
+        "/notes/welcome"
+    );
+
+    let login_request = Request::builder()
+        .method("POST")
+        .uri("/account/login")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body(Body::from(
+            "username=alice&password=ReaderPass123&next=/notes/welcome",
+        ))
+        .unwrap();
+    let login_response = router.oneshot(login_request).await.unwrap();
+    assert_eq!(login_response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(
+        login_response.headers().get(header::LOCATION).unwrap(),
+        "/notes/welcome"
+    );
 }
 
 #[tokio::test]
@@ -517,4 +790,59 @@ fn mascot_wiring_exists() {
     assert!(!home.contains("data-orbital-focus"));
     assert!(!js.contains("wireOrbitalFocus"));
     assert!(!css.contains(".hero-orb-panel"));
+}
+
+#[test]
+fn annotation_wiring_exists() {
+    let base = fs::read_to_string("templates/base.html").unwrap();
+    let note = fs::read_to_string("templates/note.html").unwrap();
+    let account = fs::read_to_string("templates/account.html").unwrap();
+    let css = fs::read_to_string("static/css/app.css").unwrap();
+    let js = fs::read_to_string("static/js/site.js").unwrap();
+
+    assert!(base.contains("href=\"/account\""));
+
+    assert!(note.contains("data-note-article"));
+    assert!(note.contains("data-annotation-root"));
+    assert!(note.contains("data-annotation-toolbar"));
+    assert!(note.contains("data-annotation-comment-lane"));
+    assert!(note.contains("data-viewer-username"));
+    assert!(note.contains("note-page-shell"));
+    assert!(note.contains("annotation-auth-card"));
+    assert!(note.contains("/account?next=/notes/{{ note.slug }}"));
+    assert!(note.contains("data-annotation-modal"));
+    assert!(note.contains("data-annotation-comment-input"));
+    assert!(note.contains("data-annotation-comment-save"));
+    assert!(note.contains("annotation-modal"));
+    assert!(note.contains("data-annotation-visibility"));
+    assert!(note.contains(">私密<"));
+    assert!(note.contains(">公开<"));
+
+    assert!(account.contains("action=\"/account/login\""));
+    assert!(account.contains("action=\"/account/register\""));
+
+    assert!(css.contains(".annotation-toolbar"));
+    assert!(css.contains(".shell.note-page-shell"));
+    assert!(css.contains(".note-annotation"));
+    assert!(css.contains(".annotation-comment-card"));
+    assert!(css.contains(".annotation-rail"));
+    assert!(css.contains(".annotation-visibility-select"));
+    assert!(css.contains(".annotation-comment-visibility"));
+    assert!(css.contains(".annotation-modal"));
+    assert!(css.contains("body.annotation-modal-open"));
+
+    assert!(js.contains("wireNoteAnnotations"));
+    assert!(js.contains("data-annotation-highlight"));
+    assert!(js.contains("data-annotation-visibility"));
+    assert!(js.contains("visibilitySelect.value"));
+    assert!(js.contains("document.addEventListener('mousedown'"));
+    assert!(js.contains("document.addEventListener('contextmenu'"));
+    assert!(js.contains("openOwnedAnnotationPanel"));
+    assert!(js.contains("annotationFromEvent"));
+    assert!(js.contains("button !== 2"));
+    assert!(js.contains("openCommentModal"));
+    assert!(js.contains("data-annotation-comment-save"));
+    assert!(!js.contains("window.prompt"));
+    assert!(js.contains("/api/notes/"));
+    assert!(!js.contains("m2w_user_session"));
 }

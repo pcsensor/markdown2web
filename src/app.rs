@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use axum::{
     Router,
-    routing::{get, post},
+    routing::{get, post, put},
 };
 use tokio::sync::{Mutex, RwLock};
 use tower_http::services::ServeDir;
@@ -13,7 +13,7 @@ use crate::{
     content::SiteData,
     error::AppResult,
     store::{filesystem, sqlite::AppDatabase},
-    web::{admin, public},
+    web::{account, admin, public},
 };
 
 pub type WatcherHandle = Arc<std::sync::Mutex<Option<notify::RecommendedWatcher>>>;
@@ -59,6 +59,18 @@ pub fn build_router(state: AppState) -> Router {
         .route("/notes/{slug}", get(public::note_detail))
         .route("/tags/{tag}", get(public::tag_detail))
         .route("/search", get(public::search))
+        .route("/account", get(account::account_page))
+        .route("/account/register", post(account::register))
+        .route("/account/login", post(account::login))
+        .route("/account/logout", post(account::logout))
+        .route(
+            "/api/notes/{slug}/annotations",
+            get(account::list_annotations).post(account::create_annotation),
+        )
+        .route(
+            "/api/annotations/{id}",
+            put(account::update_annotation).delete(account::delete_annotation),
+        )
         .route("/admin", get(admin::dashboard))
         .route("/admin/login", get(admin::login_page).post(admin::login))
         .route("/admin/logout", post(admin::logout))

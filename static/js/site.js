@@ -281,6 +281,7 @@ function wireCodeBlocks() {
     button.className = 'copy-code-button';
     button.textContent = 'Copy';
     button.setAttribute('aria-label', 'Copy code');
+    button.setAttribute('data-skip-annotation', 'true');
 
     button.addEventListener('click', async () => {
       try {
@@ -331,6 +332,680 @@ function renderMath() {
   });
 }
 
+function wireNoteAnnotations() {
+  const article = document.querySelector('[data-note-article]');
+  const root = article?.querySelector('[data-annotation-root]');
+  const toolbar = document.querySelector('[data-annotation-toolbar]');
+  const modal = document.querySelector('[data-annotation-modal]');
+  const lane = document.querySelector('[data-annotation-comment-lane]');
+  const emptyState = document.querySelector('[data-annotation-empty]');
+  if (!article || !root || !toolbar || !lane || !modal) return;
+
+  const noteSlug = article.dataset.noteSlug;
+  const accountUrl = article.dataset.accountUrl || '/account';
+  const viewerUsername = article.dataset.viewerUsername || '';
+  const enabled = article.dataset.annotationEnabled === 'true';
+  const highlightButton = toolbar.querySelector('[data-annotation-highlight]');
+  const commentButton = toolbar.querySelector('[data-annotation-comment]');
+  const colorInput = toolbar.querySelector('[data-annotation-color]');
+  const modalQuote = modal.querySelector('[data-annotation-modal-quote]');
+  const modalInput = modal.querySelector('[data-annotation-comment-input]');
+  const visibilitySelect = modal.querySelector('[data-annotation-visibility]');
+  const modalSave = modal.querySelector('[data-annotation-comment-save]');
+  const modalCloseButtons = modal.querySelectorAll('[data-annotation-modal-close]');
+  if (!noteSlug || !highlightButton || !commentButton || !colorInput || !visibilitySelect || !modalInput || !modalQuote || !modalSave) return;
+
+  const baseHtml = root.innerHTML;
+  const stackedQuery = window.matchMedia('(max-width: 980px)');
+  const state = {
+    annotations: [],
+    pending: null,
+    activeAnnotationId: null,
+    layoutFrame: 0,
+    modalResolver: null,
+  };
+
+  const isOwnedAnnotation = (annotation) =>
+    Boolean(annotation) && enabled && annotation.username === viewerUsername;
+
+  const targetElement = (target) => {
+    if (target instanceof Element) return target;
+    return target?.parentElement ?? null;
+  };
+
+  const closeCommentModal = (result = null) => {
+    modal.hidden = true;
+    document.body.classList.remove('annotation-modal-open');
+    const resolver = state.modalResolver;
+    state.modalResolver = null;
+    if (resolver) resolver(result);
+  };
+
+  const openCommentModal = ({ quote, comment, visibility }) => {
+    modal.hidden = false;
+    document.body.classList.add('annotation-modal-open');
+    modalQuote.textContent = `“${quote}”`;
+    modalInput.value = comment ?? '';
+    visibilitySelect.value = visibility === 'public' ? 'public' : 'private';
+    requestAnimationFrame(() => {
+      modalInput.focus();
+      modalInput.setSelectionRange(modalInput.value.length, modalInput.value.length);
+    });
+    return new Promise((resolve) => {
+      state.modalResolver = resolve;
+    });
+  };
+
+  const hideToolbar = () => {
+    toolbar.hidden = true;
+    toolbar.classList.remove('is-visible');
+    root.querySelectorAll('.note-annotation.is-active').forEach((element) => {
+      element.classList.remove('is-active');
+    });
+    state.pending = null;
+    state.activeAnnotationId = null;
+  };
+
+  const setToolbarPosition = (rect) => {
+    toolbar.hidden = false;
+    toolbar.style.left = '0px';
+    toolbar.style.top = '0px';
+    const toolbarRect = toolbar.getBoundingClientRect();
+    const top = clamp(rect.top - toolbarRect.height - 12, 12, window.innerHeight - toolbarRect.height - 12);
+    const left = clamp(
+      rect.left + rect.width / 2 - toolbarRect.width / 2,
+      12,
+      window.innerWidth - toolbarRect.width - 12,
+    );
+    toolbar.style.left = `${left}px`;
+    toolbar.style.top = `${top}px`;
+    requestAnimationFrame(() => toolbar.classList.add('is-visible'));
+  };
+
+  const updateToolbarState = () => {
+    const annotation = state.pending?.annotation ?? null;
+    const hasHighlight = Boolean(annotation?.color);
+    highlightButton.textContent = hasHighlight ? '取消高亮' : '高亮';
+    commentButton.textContent = annotation?.comment ? '编辑评论' : '评论';
+    colorInput.value = annotation?.color || colorInput.value || '#fde68a';
+  };
+
+  const showToolbarForPending = (pending, rect) => {
+    if (pending.annotation && !isOwnedAnnotation(pending.annotation)) return;
+    state.pending = pending;
+    state.activeAnnotationId = pending.annotation?.id ?? null;
+    root.querySelectorAll('.note-annotation.is-active').forEach((element) => {
+      element.classList.remove('is-active');
+    });
+    if (state.activeAnnotationId !== null) {
+      annotationSegments(state.activeAnnotationId).forEach((element) => {
+        element.classList.add('is-active');
+      });
+    }
+    updateToolbarState();
+    setToolbarPosition(rect);
+  };
+
+  const annotationSegments = (annotationId) =>
+    Array.from(root.querySelectorAll(`[data-annotation-id="${annotationId}"]`));
+
+  const annotationRect = (annotationId) => {
+    const segments = annotationSegments(annotationId);
+    if (!segments.length) return null;
+    const rects = segments.map((segment) => segment.getBoundingClientRect());
+    const left = Math.min(...rects.map((rect) => rect.left));
+    const top = Math.min(...rects.map((rect) => rect.top));
+    const right = Math.max(...rects.map((rect) => rect.right));
+    const bottom = Math.max(...rects.map((rect) => rect.bottom));
+    return {
+      left,
+      top,
+      right,
+      bottom,
+      width: right - left,
+      height: bottom - top,
+    };
+  };
+
+  const textWalker = () =>
+    document.createTreeWalker(
+      root,
+      NodeFilter.SHOW_TEXT,
+      {
+        acceptNode(node) {
+          if (!node.nodeValue || !node.nodeValue.length) return NodeFilter.FILTER_REJECT;
+          const parent = node.parentElement;
+          if (!parent) return NodeFilter.FILTER_REJECT;
+          if (parent.closest('.copy-code-button, script, style, textarea')) {
+            return NodeFilter.FILTER_REJECT;
+          }
+          return NodeFilter.FILTER_ACCEPT;
+        },
+      },
+    );
+
+  const getOffsetsFromRange = (range) => {
+    const startRange = range.cloneRange();
+    startRange.selectNodeContents(root);
+    startRange.setEnd(range.startContainer, range.startOffset);
+
+    const endRange = range.cloneRange();
+    endRange.selectNodeContents(root);
+    endRange.setEnd(range.endContainer, range.endOffset);
+
+    return {
+      start: startRange.toString().length,
+      end: endRange.toString().length,
+    };
+  };
+
+  const collectSegments = (startOffset, endOffset) => {
+    const walker = textWalker();
+    const segments = [];
+    let node;
+    let cursor = 0;
+
+    while ((node = walker.nextNode())) {
+      const length = node.nodeValue.length;
+      const nodeStart = cursor;
+      const nodeEnd = cursor + length;
+      const overlapStart = Math.max(startOffset, nodeStart);
+      const overlapEnd = Math.min(endOffset, nodeEnd);
+
+      if (overlapEnd > overlapStart) {
+        segments.push({
+          node,
+          start: overlapStart - nodeStart,
+          end: overlapEnd - nodeStart,
+        });
+      }
+      cursor = nodeEnd;
+    }
+
+    return segments;
+  };
+
+  const normalizeText = (value) => value.replace(/\s+/g, ' ').trim();
+
+  const segmentsText = (segments) =>
+    segments
+      .map(({ node, start, end }) => node.nodeValue.slice(start, end))
+      .join('');
+
+  const fullTextContent = () => {
+    const walker = textWalker();
+    let node;
+    let text = '';
+
+    while ((node = walker.nextNode())) {
+      text += node.nodeValue;
+    }
+
+    return text;
+  };
+
+  const resolveAnnotationOffsets = (annotation) => {
+    const directSegments = collectSegments(annotation.start_offset, annotation.end_offset);
+    if (
+      directSegments.length &&
+      normalizeText(segmentsText(directSegments)) === normalizeText(annotation.quote)
+    ) {
+      return {
+        start: annotation.start_offset,
+        end: annotation.end_offset,
+      };
+    }
+
+    const quote = annotation.quote.trim();
+    if (!quote) return null;
+
+    const haystack = fullTextContent();
+    let cursor = 0;
+    let bestIndex = -1;
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    while (cursor < haystack.length) {
+      const index = haystack.indexOf(quote, cursor);
+      if (index === -1) break;
+      const distance = Math.abs(index - annotation.start_offset);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = index;
+      }
+      cursor = index + Math.max(quote.length, 1);
+    }
+
+    if (bestIndex === -1) return null;
+    return {
+      start: bestIndex,
+      end: bestIndex + quote.length,
+    };
+  };
+
+  const wrapSegment = (segment, annotation, isFirst, isLast) => {
+    const { node, start, end } = segment;
+    const value = node.nodeValue;
+    const before = value.slice(0, start);
+    const middle = value.slice(start, end);
+    const after = value.slice(end);
+    const fragment = document.createDocumentFragment();
+
+    if (before) fragment.appendChild(document.createTextNode(before));
+
+    const span = document.createElement('span');
+    span.className = 'note-annotation';
+    span.dataset.annotationId = String(annotation.id);
+    span.dataset.annotationStart = String(annotation.start_offset);
+    span.dataset.annotationEnd = String(annotation.end_offset);
+    if (annotation.color) {
+      span.classList.add('has-highlight');
+      span.style.setProperty('--annotation-color', annotation.color);
+    }
+    if (annotation.comment) {
+      span.classList.add('has-comment');
+      if (isFirst) span.classList.add('annotation-segment-start');
+      if (isLast) span.classList.add('annotation-segment-end');
+    }
+    if (state.activeAnnotationId === annotation.id) {
+      span.classList.add('is-active');
+    }
+    span.textContent = middle;
+    fragment.appendChild(span);
+
+    if (after) fragment.appendChild(document.createTextNode(after));
+    node.parentNode.replaceChild(fragment, node);
+  };
+
+  const layoutComments = () => {
+    if (state.layoutFrame) {
+      cancelAnimationFrame(state.layoutFrame);
+    }
+    state.layoutFrame = requestAnimationFrame(() => {
+      const comments = state.annotations.filter((annotation) => annotation.comment);
+      lane.innerHTML = '';
+      if (!comments.length) {
+        lane.style.height = stackedQuery.matches ? 'auto' : '220px';
+        if (emptyState) lane.appendChild(emptyState);
+        return;
+      }
+
+      const articleRect = article.getBoundingClientRect();
+      let lastBottom = 0;
+
+      comments
+        .map((annotation) => ({
+          annotation,
+          rect: annotationRect(annotation.id),
+        }))
+        .filter((item) => item.rect)
+        .sort((left, right) => left.rect.top - right.rect.top)
+        .forEach(({ annotation, rect }) => {
+          const card = document.createElement('article');
+          card.className = 'annotation-comment-card interactive-card interactive-card-subtle';
+          if (annotation.color) {
+            card.style.setProperty('--annotation-color', annotation.color);
+          }
+
+          const quote = document.createElement('p');
+          quote.className = 'annotation-comment-quote';
+          quote.textContent = `“${annotation.quote}”`;
+
+          const visibility = document.createElement('span');
+          visibility.className = 'annotation-comment-visibility';
+          visibility.textContent = annotation.visibility === 'public' ? '公开' : '私密';
+
+          const body = document.createElement('p');
+          body.className = 'annotation-comment-body';
+          body.textContent = annotation.comment;
+
+          card.append(quote, visibility, body);
+          lane.appendChild(card);
+
+          if (stackedQuery.matches) {
+            card.style.top = 'auto';
+            return;
+          }
+
+          const naturalTop = Math.max(0, rect.top - articleRect.top);
+          const top = Math.max(naturalTop, lastBottom);
+          card.style.top = `${top}px`;
+          lastBottom = top + card.offsetHeight + 12;
+        });
+
+      lane.style.height = stackedQuery.matches
+        ? 'auto'
+        : `${Math.max(article.offsetHeight, lastBottom + 12, 220)}px`;
+    });
+  };
+
+  const renderAnnotations = () => {
+    root.innerHTML = baseHtml;
+
+    state.annotations
+      .slice()
+      .sort((left, right) => {
+        if (left.start_offset === right.start_offset) {
+          return right.end_offset - left.end_offset;
+        }
+        return right.start_offset - left.start_offset;
+      })
+      .forEach((annotation) => {
+        const offsets = resolveAnnotationOffsets(annotation);
+        if (!offsets) return;
+        const segments = collectSegments(offsets.start, offsets.end);
+        if (!segments.length) return;
+        segments
+          .slice()
+          .reverse()
+          .forEach((segment, reverseIndex) => {
+            const originalIndex = segments.length - 1 - reverseIndex;
+            wrapSegment(
+              segment,
+              annotation,
+              originalIndex === 0,
+              originalIndex === segments.length - 1,
+            );
+          });
+      });
+
+    wireCodeBlocks();
+    layoutComments();
+  };
+
+  const loadAnnotations = async () => {
+    try {
+      const response = await fetch(`/api/notes/${encodeURIComponent(noteSlug)}/annotations`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      const data = await response.json();
+      state.annotations = data.annotations ?? [];
+      renderAnnotations();
+    } catch (error) {
+      console.warn('Failed to load annotations', error);
+      renderAnnotations();
+    }
+  };
+
+  const saveAnnotation = async (method, url, payload) => {
+    const response = await fetch(url, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    if (response.status === 401) {
+      window.location.href = accountUrl;
+      return null;
+    }
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+    if (response.status === 204) {
+      return null;
+    }
+    return response.json();
+  };
+
+  const deleteAnnotation = async (annotationId) => {
+    const response = await fetch(`/api/annotations/${annotationId}`, {
+      method: 'DELETE',
+      headers: { Accept: 'application/json' },
+    });
+    if (response.status === 401) {
+      window.location.href = accountUrl;
+      return;
+    }
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+  };
+
+  const commit = async (work) => {
+    try {
+      await work();
+      hideToolbar();
+      window.getSelection()?.removeAllRanges();
+      await loadAnnotations();
+    } catch (error) {
+      console.warn('Annotation action failed', error);
+      window.alert('操作失败，请稍后重试。');
+    }
+  };
+
+  const handleHighlightAction = () => {
+    const pending = state.pending;
+    if (!pending) return;
+
+    commit(async () => {
+      const annotation = pending.annotation;
+      if (annotation?.color) {
+        if (annotation.comment) {
+          await saveAnnotation('PUT', `/api/annotations/${annotation.id}`, {
+            color: null,
+            comment: annotation.comment,
+            visibility: annotation.visibility || 'private',
+          });
+        } else {
+          await deleteAnnotation(annotation.id);
+        }
+        return;
+      }
+
+      const payload = {
+        color: colorInput.value,
+        comment: annotation?.comment ?? null,
+        visibility: annotation?.comment ? (annotation.visibility || 'private') : 'private',
+      };
+
+      if (annotation) {
+        await saveAnnotation('PUT', `/api/annotations/${annotation.id}`, payload);
+      } else {
+      await saveAnnotation('POST', `/api/notes/${encodeURIComponent(noteSlug)}/annotations`, {
+        start_offset: pending.start,
+        end_offset: pending.end,
+        quote: pending.quote,
+        ...payload,
+        });
+      }
+    });
+  };
+
+  const handleCommentAction = () => {
+    const pending = state.pending;
+    if (!pending) return;
+
+    openCommentModal({
+      quote: pending.quote,
+      comment: pending.annotation?.comment ?? '',
+      visibility: pending.annotation?.visibility ?? 'private',
+    }).then((result) => {
+      if (!result) return;
+      const trimmed = result.comment.trim();
+      const annotation = pending.annotation;
+
+      commit(async () => {
+        if (annotation) {
+          if (!trimmed) {
+            if (annotation.color) {
+              await saveAnnotation('PUT', `/api/annotations/${annotation.id}`, {
+                color: annotation.color,
+                comment: null,
+                visibility: 'private',
+              });
+            } else {
+              await deleteAnnotation(annotation.id);
+            }
+            return;
+          }
+
+          await saveAnnotation('PUT', `/api/annotations/${annotation.id}`, {
+            color: annotation.color,
+            comment: trimmed,
+            visibility: result.visibility,
+          });
+          return;
+        }
+
+        if (!trimmed) return;
+
+        await saveAnnotation('POST', `/api/notes/${encodeURIComponent(noteSlug)}/annotations`, {
+          start_offset: pending.start,
+          end_offset: pending.end,
+          quote: pending.quote,
+          color: null,
+          comment: trimmed,
+          visibility: result.visibility,
+        });
+      });
+    });
+  };
+
+  const validSelectionRange = () => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
+    const range = selection.getRangeAt(0);
+    const common = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+      ? range.commonAncestorContainer
+      : range.commonAncestorContainer.parentElement;
+    if (!common || !root.contains(common)) return null;
+    if (common.closest('pre, code, button, input, textarea')) return null;
+    const quote = selection.toString().replace(/\s+/g, ' ').trim();
+    if (!quote) return null;
+
+    const { start, end } = getOffsetsFromRange(range);
+    if (end <= start) return null;
+
+    const ownedAnnotation =
+      state.annotations.find(
+        (item) =>
+          item.username === viewerUsername &&
+          item.start_offset === start &&
+          item.end_offset === end,
+      ) ?? null;
+
+    return {
+      start,
+      end,
+      quote,
+      annotation: ownedAnnotation,
+      rect: range.getBoundingClientRect(),
+    };
+  };
+
+  const showSelectionToolbar = () => {
+    if (!enabled) {
+      hideToolbar();
+      return;
+    }
+    const pending = validSelectionRange();
+    if (!pending) {
+      hideToolbar();
+      return;
+    }
+    showToolbarForPending(pending, pending.rect);
+  };
+
+  highlightButton.addEventListener('click', handleHighlightAction);
+  commentButton.addEventListener('click', handleCommentAction);
+  modalSave.addEventListener('click', () => {
+    closeCommentModal({
+      comment: modalInput.value,
+      visibility: visibilitySelect.value,
+    });
+  });
+  modalCloseButtons.forEach((button) => {
+    button.addEventListener('click', () => closeCommentModal(null));
+  });
+
+  root.addEventListener('mouseup', () => {
+    window.setTimeout(showSelectionToolbar, 0);
+  });
+  root.addEventListener('touchend', () => {
+    window.setTimeout(showSelectionToolbar, 0);
+  });
+
+  const openOwnedAnnotationPanel = (annotationElement) => {
+    window.getSelection()?.removeAllRanges();
+    const annotationId = Number(annotationElement.dataset.annotationId);
+    const annotation = state.annotations.find((item) => item.id === annotationId);
+    if (!isOwnedAnnotation(annotation)) return;
+    const rect = annotationRect(annotationId) ?? annotationElement.getBoundingClientRect();
+    showToolbarForPending(
+      {
+        start: annotation.start_offset,
+        end: annotation.end_offset,
+        quote: annotation.quote,
+        annotation,
+      },
+      rect,
+    );
+  };
+
+  const annotationFromEvent = (event) => {
+    const annotationElement = targetElement(event.target)?.closest('.note-annotation');
+    if (!annotationElement) return null;
+    if (!root.contains(annotationElement)) return null;
+    return annotationElement;
+  };
+
+  root.addEventListener('click', (event) => {
+    const annotationElement = annotationFromEvent(event);
+    if (!annotationElement || !enabled) return;
+    if ('button' in event && event.button !== 0) return;
+    event.preventDefault();
+    openOwnedAnnotationPanel(annotationElement);
+  });
+
+  document.addEventListener('mousedown', (event) => {
+    const annotationElement = annotationFromEvent(event);
+    if (!annotationElement) return;
+    if ('button' in event && event.button !== 2) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === 'function') {
+      event.stopImmediatePropagation();
+    }
+    if (!enabled) return;
+    openOwnedAnnotationPanel(annotationElement);
+  }, true);
+
+  document.addEventListener('contextmenu', (event) => {
+    const annotationElement = annotationFromEvent(event);
+    if (!annotationElement) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === 'function') {
+      event.stopImmediatePropagation();
+    }
+    if (!enabled) return;
+    openOwnedAnnotationPanel(annotationElement);
+  }, true);
+
+  document.addEventListener('click', (event) => {
+    if (toolbar.hidden) return;
+    const target = targetElement(event.target);
+    if (toolbar.contains(target) || root.contains(target)) return;
+    hideToolbar();
+  });
+
+  window.addEventListener('resize', layoutComments, { passive: true });
+  window.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    if (!modal.hidden) {
+      closeCommentModal(null);
+      return;
+    }
+    hideToolbar();
+  });
+
+  loadAnnotations();
+}
+
 function init() {
   document.body.classList.add('js-ready');
   markCurrentNav();
@@ -341,6 +1016,7 @@ function init() {
   wireButtons();
   wireCardGlow();
   renderMath();
+  wireNoteAnnotations();
   wireCodeBlocks();
 }
 

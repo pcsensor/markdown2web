@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Account · {{ site_name }}{% endblock %}
+{% block content %}
+<section class="auth-shell auth-grid account-grid">
+  <div class="auth-copy">
+    <p class="eyebrow">Reader annotations</p>
+    <h1>登录后即可高亮与评论文章。</h1>
+    <p class="muted">公开访客依然可以阅读公开评论；注册或登录后，你可以决定评论是公开还是私密。</p>
+    <div class="feature-pills">
+      <span class="feature-pill">Register</span>
+      <span class="feature-pill">Highlight</span>
+      <span class="feature-pill">Comment</span>
+    </div>
+  </div>
+
+  {% match current_user %}
+    {% when Some with (username) %}
+      <div class="panel interactive-card auth-panel account-status-panel">
+        <p class="eyebrow">Signed in</p>
+        <h2>{{ username }}</h2>
+        <p class="muted">现在可以在文章页选中文字进行高亮与评论，并选择公开或私密。</p>
+        <div class="stack-form">
+          <a class="button" href="{{ next }}">返回当前页面</a>
+          <form action="/account/logout" method="post">
+            <input type="hidden" name="next" value="{{ next }}" />
+            <button class="secondary" type="submit">退出登录</button>
+          </form>
+        </div>
+      </div>
+    {% when None %}
+      <div class="account-form-stack">
+        <form class="panel interactive-card auth-panel" action="/account/login" method="post">
+          <p class="eyebrow">Login</p>
+          <h2>登录账号</h2>
+          {% match login_error %}
+            {% when Some with (message) %}
+              <p class="error-banner">{{ message }}</p>
+            {% when None %}
+            {% endmatch %}
+          <input type="hidden" name="next" value="{{ next }}" />
+          <label>用户名<input type="text" name="username" value="{{ login_username }}" autocomplete="username" required /></label>
+          <label>密码<input type="password" name="password" autocomplete="current-password" required /></label>
+          <button type="submit">登录并返回</button>
+        </form>
+
+        <form class="panel interactive-card auth-panel" action="/account/register" method="post">
+          <p class="eyebrow">Register</p>
+          <h2>注册账号</h2>
+          {% match register_error %}
+            {% when Some with (message) %}
+              <p class="error-banner">{{ message }}</p>
+            {% when None %}
+            {% endmatch %}
+          <input type="hidden" name="next" value="{{ next }}" />
+          <label>用户名<input type="text" name="username" value="{{ register_username }}" autocomplete="username" required /></label>
+          <label>密码<input type="password" name="password" minlength="8" autocomplete="new-password" required /></label>
+          <button type="submit">注册并登录</button>
+        </form>
+      </div>
+    {% endmatch %}
+</section>
+{% endblock %}

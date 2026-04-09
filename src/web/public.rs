@@ -3,6 +3,7 @@ use axum::{
     extract::{Path, Query, State},
     response::{Html, IntoResponse},
 };
+use axum_extra::extract::cookie::CookieJar;
 use serde::Deserialize;
 
 use crate::{
@@ -10,6 +11,7 @@ use crate::{
     content::Note,
     error::{AppError, AppResult},
     search::index::search_notes,
+    web::auth,
 };
 
 #[derive(Debug, Clone)]
@@ -40,6 +42,9 @@ struct NoteTemplate {
     site_name: String,
     note: Note,
     backlinks: Vec<LinkView>,
+    viewer: Option<String>,
+    viewer_username: String,
+    annotations_enabled: bool,
 }
 
 #[derive(Template)]
@@ -89,6 +94,7 @@ pub async fn notes_index(State(state): State<AppState>) -> AppResult<Html<String
 pub async fn note_detail(
     Path(slug): Path<String>,
     State(state): State<AppState>,
+    jar: CookieJar,
 ) -> AppResult<Html<String>> {
     let site = state.site.read().await.clone();
     let note = site
@@ -108,10 +114,14 @@ pub async fn note_detail(
             })
         })
         .collect();
+    let viewer = auth::current_public_user(&jar, &state)?;
     render(NoteTemplate {
         site_name: state.config.site_name.clone(),
         note,
         backlinks,
+        annotations_enabled: viewer.is_some(),
+        viewer_username: viewer.clone().unwrap_or_default(),
+        viewer,
     })
 }
 

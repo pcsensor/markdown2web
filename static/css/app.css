@@ -34,6 +34,9 @@ body {
     linear-gradient(180deg, #fbfdff 0%, var(--bg) 45%, #f2f6fb 100%);
   position: relative;
 }
+body.annotation-modal-open {
+  overflow: hidden;
+}
 
 body::before,
 body::after {
@@ -156,6 +159,7 @@ svg { display: block; width: 100%; height: 100%; }
 svg * { stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 
 .shell { width: min(1140px, calc(100vw - 32px)); margin: 0 auto; position: relative; z-index: 1; }
+.shell.note-page-shell { width: min(1560px, calc(100vw - 24px)); }
 .site-backdrop { position: fixed; inset: 0; pointer-events: none; z-index: -2; overflow: hidden; }
 .site-orb { position: absolute; border-radius: 999px; filter: blur(20px); opacity: 0.55; }
 .orb-a { width: 22rem; height: 22rem; top: 5rem; left: -6rem; background: radial-gradient(circle, rgba(245, 158, 11, 0.2), transparent 65%); }
@@ -868,8 +872,133 @@ select:focus-visible {
 }
 .hero-stat strong { display: block; font-size: 1.15rem; }
 .hero-stat span { color: var(--muted); font-size: 0.9rem; }
-.note-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; }
+.note-layout { display: grid; grid-template-columns: minmax(0, 1fr) 260px 300px; gap: 20px; align-items: start; }
+.note-article { position: relative; overflow: visible; }
+.note-article-body { position: relative; z-index: 1; }
 .note-sidebar { display: grid; gap: 16px; }
+.annotation-rail { position: relative; min-width: 0; }
+.annotation-rail-card {
+  position: sticky;
+  top: 96px;
+  overflow: visible;
+}
+.annotation-comment-lane {
+  position: relative;
+  min-height: 220px;
+}
+.annotation-empty {
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px dashed rgba(116,154,255,0.35);
+  background: rgba(255,255,255,0.7);
+  color: var(--muted);
+}
+.annotation-comment-card {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: grid;
+  gap: 6px;
+  padding: 11px 13px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.92);
+  border: 1px solid rgba(217,225,236,0.92);
+  box-shadow: 0 10px 22px rgba(15,23,42,0.08);
+}
+.annotation-comment-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--annotation-color, var(--accent));
+  opacity: 0.7;
+}
+.annotation-comment-quote {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin: 0;
+  line-height: 1.35;
+}
+.annotation-comment-visibility {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(37,99,235,0.08);
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+.annotation-comment-body {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.5;
+  font-size: 0.94rem;
+}
+.annotation-comment-card > * {
+  position: relative;
+  z-index: 1;
+}
+.annotation-auth-actions,
+.account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.annotation-helper {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.65;
+}
+.annotation-auth-actions form,
+.account-actions form {
+  margin: 0;
+}
+.annotation-auth-actions > * {
+  flex: 1 1 auto;
+}
+.note-annotation {
+  position: relative;
+  border-radius: 0.35em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  transition: box-shadow 180ms ease-out, transform 180ms ease-out, background-color 180ms ease-out;
+}
+.note-annotation.has-highlight {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.52), rgba(255,255,255,0.08)),
+    var(--annotation-color, #fde68a);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.45);
+}
+.note-annotation.has-comment {
+  border-bottom: 2px dashed var(--annotation-color, rgba(37,99,235,0.6));
+  padding-bottom: 0.06em;
+}
+.note-annotation.annotation-segment-end.has-comment::after {
+  content: "✓";
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  margin-left: 0.18rem;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.9);
+  color: var(--annotation-color, var(--accent));
+  font-size: 0.72rem;
+  box-shadow: 0 3px 10px rgba(15,23,42,0.12);
+}
+.note-annotation.is-active {
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.65),
+    0 0 0 3px rgba(37,99,235,0.15);
+}
 .note-summary { color: var(--muted); font-size: 1.06rem; max-width: 48rem; }
 .sidebar-card h2 { margin: 0; }
 .sidebar-title-row {
@@ -1022,6 +1151,27 @@ button.secondary, .button.secondary {
 }
 .auth-copy h1 { font-size: clamp(2rem, 4vw, 3.5rem); margin: 10px 0; letter-spacing: -0.04em; }
 .auth-panel { max-width: 430px; width: 100%; }
+.account-shell { display: grid; gap: 24px; }
+.account-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.account-form-stack,
+.account-status-panel {
+  display: grid;
+  gap: 16px;
+}
+.account-panel { min-width: 0; }
+.account-pill {
+  display: grid;
+  gap: 2px;
+  min-width: 180px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(255,255,255,0.82);
+  border: 1px solid rgba(217,225,236,0.9);
+}
 .error-banner {
   padding: 12px 14px;
   border-radius: 12px;
@@ -1045,6 +1195,128 @@ button.secondary, .button.secondary {
 .list-card.compact { align-items: center; }
 .admin-note-row { background: rgba(255,255,255,0.62); }
 .wide, .wide-editor { min-width: 0; }
+.annotation-toolbar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 80;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.98);
+  color: var(--text);
+  border: 1px solid rgba(217,225,236,0.92);
+  box-shadow: 0 20px 48px rgba(15,23,42,0.16);
+  backdrop-filter: blur(16px);
+}
+.annotation-toolbar[hidden] {
+  display: none;
+}
+.annotation-toolbar button,
+.annotation-toolbar .button {
+  padding: 10px 14px;
+  border-radius: 12px;
+  box-shadow: none;
+}
+.annotation-toolbar-button {
+  background: linear-gradient(135deg, var(--accent), #3b82f6);
+  color: white;
+}
+.annotation-toolbar button.secondary {
+  background: rgba(248,250,252,0.96);
+  color: var(--text);
+  border: 1px solid rgba(217,225,236,0.92);
+}
+.annotation-color-input {
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+}
+.annotation-toolbar input[type="color"] {
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid rgba(217,225,236,0.92);
+  background: rgba(255,255,255,0.98);
+  cursor: pointer;
+}
+.annotation-toolbar input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.annotation-toolbar input[type="color"]::-webkit-color-swatch {
+  border: none;
+  border-radius: 8px;
+}
+.annotation-modal-shell[hidden] {
+  display: none;
+}
+.annotation-modal-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+}
+.annotation-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15,23,42,0.32);
+  backdrop-filter: blur(8px);
+}
+.annotation-modal {
+  position: relative;
+  width: min(520px, calc(100vw - 32px));
+  margin: min(12vh, 96px) auto 0;
+  display: grid;
+  gap: 16px;
+  padding: 24px;
+  background: rgba(255,255,255,0.98);
+  border: 1px solid rgba(217,225,236,0.92);
+  box-shadow: 0 30px 80px rgba(15,23,42,0.22);
+}
+.annotation-modal-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+.annotation-modal-head h2 {
+  margin: 6px 0 0;
+}
+.annotation-modal-quote {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(37,99,235,0.06);
+  color: var(--muted);
+  line-height: 1.6;
+}
+.annotation-modal-field {
+  display: grid;
+  gap: 8px;
+}
+.annotation-modal-field span {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.annotation-modal textarea {
+  min-height: 140px;
+}
+.annotation-visibility-select,
+.annotation-modal-visibility {
+  width: 100%;
+  min-width: 0;
+  background: rgba(255,255,255,0.98);
+  color: var(--text);
+}
+.annotation-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
 .empty-state {
   padding: 16px 18px;
   border-radius: 16px;
@@ -1118,6 +1390,7 @@ button.secondary, .button.secondary {
   .admin-grid,
   .editor-grid,
   .auth-grid,
+  .account-grid,
   .footer-row {
     grid-template-columns: 1fr;
   }
@@ -1125,6 +1398,21 @@ button.secondary, .button.secondary {
   .search-panel { grid-template-columns: 1fr; }
   .list-card, .note-hero { flex-direction: column; align-items: stretch; }
   .list-card-side { justify-content: flex-start; }
+  .annotation-rail-card {
+    position: relative;
+    top: auto;
+  }
+  .annotation-comment-lane {
+    min-height: 0;
+    display: grid;
+    gap: 12px;
+  }
+  .annotation-comment-card {
+    position: relative;
+    left: auto;
+    right: auto;
+    top: auto !important;
+  }
   .hero-mascot-panel {
     min-height: 380px;
     --mascot-size: 110px;
