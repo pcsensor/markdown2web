@@ -431,7 +431,7 @@ function wireNoteAnnotations() {
     highlightButton.textContent = hasHighlight ? '取消高亮' : '高亮';
     commentButton.textContent = hasComment ? '编辑评论' : '评论';
     colorInput.value = annotation?.color || colorInput.value || '#fde68a';
-    if (deleteCommentButton) deleteCommentButton.hidden = !hasComment;
+    if (deleteCommentButton) deleteCommentButton.hidden = !hasComment || !isOwnedAnnotation(annotation);
   };
 
   const showToolbarForPending = (pending, rect) => {
@@ -931,6 +931,7 @@ function wireNoteAnnotations() {
     }
     const pending = validSelectionRange();
     if (!pending) {
+      if (state.pending) return;
       hideToolbar();
       return;
     }
@@ -978,18 +979,32 @@ function wireNoteAnnotations() {
     window.setTimeout(showSelectionToolbar, 0);
   });
 
-  const openOwnedAnnotationPanel = (annotationElement) => {
+  const openOwnedAnnotationPanel = (annotationElement, forceNew = false) => {
     window.getSelection()?.removeAllRanges();
     const annotationId = Number(annotationElement.dataset.annotationId);
     const annotation = state.annotations.find((item) => item.id === annotationId);
-    if (!isOwnedAnnotation(annotation)) return;
+    if (!annotation) return;
     const rect = annotationRect(annotationId) ?? annotationElement.getBoundingClientRect();
+
+    if (isOwnedAnnotation(annotation) && !forceNew) {
+      showToolbarForPending(
+        {
+          start: annotation.start_offset,
+          end: annotation.end_offset,
+          quote: annotation.quote,
+          annotation,
+        },
+        rect,
+      );
+      return;
+    }
+
     showToolbarForPending(
       {
         start: annotation.start_offset,
         end: annotation.end_offset,
         quote: annotation.quote,
-        annotation,
+        annotation: null,
       },
       rect,
     );
@@ -1002,7 +1017,6 @@ function wireNoteAnnotations() {
     return annotationElement;
   };
 
-  // 给元素列表依次添加闪烁类，动画结束后自动移除
   const flashElements = (elements, cls) => {
     elements.forEach((el) => {
       el.classList.remove(cls);
@@ -1013,7 +1027,6 @@ function wireNoteAnnotations() {
     });
   };
 
-  // 左键单击已有注释 → 有评论时闪烁对应卡片；自己的注释同时打开操作面板
   root.addEventListener('click', (event) => {
     const annotationElement = annotationFromEvent(event);
     if (!annotationElement) return;
@@ -1023,14 +1036,12 @@ function wireNoteAnnotations() {
     const annotationId = Number(annotationElement.dataset.annotationId);
     const annotation = state.annotations.find((item) => item.id === annotationId);
 
-    // 有评论 → 闪烁对应评论卡片
     if (annotation?.comment) {
       const card = lane.querySelector(`[data-annotation-id="${annotationId}"]`);
       if (card) flashElements([card], 'is-flashing');
     }
 
-    // 自己的注释 → 打开操作面板
-    if (enabled) openOwnedAnnotationPanel(annotationElement);
+    if (enabled) openOwnedAnnotationPanel(annotationElement, !isOwnedAnnotation(annotation));
   });
 
   document.addEventListener('mousedown', (event) => {
@@ -1040,12 +1051,13 @@ function wireNoteAnnotations() {
     event.preventDefault();
   }, true);
 
-  // 右键点击已有注释 → 在捕获阶段拦截浏览器菜单并打开操作面板
   document.addEventListener('contextmenu', (event) => {
     const annotationElement = annotationFromEvent(event);
     if (!annotationElement || !enabled) return;
     event.preventDefault();
-    openOwnedAnnotationPanel(annotationElement);
+    const annotationId = Number(annotationElement.dataset.annotationId);
+    const annotation = state.annotations.find((item) => item.id === annotationId);
+    openOwnedAnnotationPanel(annotationElement, !isOwnedAnnotation(annotation));
   }, true);
 
   // 单击评论卡片 → 闪烁文章内对应注释文字
