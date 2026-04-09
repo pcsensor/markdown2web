@@ -32,6 +32,23 @@
       <input type="file" name="file" required />
       <button type="submit">上传资源</button>
     </form>
+
+    <div class="panel-title-row second">
+      <h2>修改管理员密码</h2>
+      <span class="panel-chip">security</span>
+    </div>
+    {% match password_error %}
+      {% when Some with (message) %}
+        <p class="error-banner">{{ message }}</p>
+      {% when None %}
+      {% endmatch %}
+    <form action="/admin/password" method="post" class="stack-form">
+      <label>当前密码<input type="password" name="current_password" autocomplete="current-password" required /></label>
+      <label>新密码<input type="password" name="new_password" minlength="8" autocomplete="new-password" required /></label>
+      <label>确认新密码<input type="password" name="confirm_password" minlength="8" autocomplete="new-password" required /></label>
+      <button type="submit">更新密码</button>
+    </form>
+    <p class="muted admin-form-hint">更新成功后会退出当前登录，请使用新密码重新进入后台。</p>
   </div>
 
   <div class="panel wide interactive-card">

@@ -30,7 +30,7 @@ fn test_config(temp: &TempDir) -> AppConfig {
         generated_dir,
         data_dir,
         admin_username: "admin".into(),
-        admin_password: "Pcsensor1121@".into(),
+        admin_password: "admin123456".into(),
         watch_enabled: false,
         upload_limit_mb: 10,
     }
@@ -124,7 +124,7 @@ async fn admin_auth_guard_and_save_note() {
         .method("POST")
         .uri("/admin/login")
         .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-        .body(Body::from("username=admin&password=Pcsensor1121@"))
+        .body(Body::from("username=admin&password=admin123456"))
         .unwrap();
     let response = router.clone().oneshot(login_request).await.unwrap();
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
@@ -135,6 +135,23 @@ async fn admin_auth_guard_and_save_note() {
         .to_str()
         .unwrap()
         .to_string();
+
+    let dashboard = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/admin")
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(dashboard.status(), StatusCode::OK);
+    let body = to_bytes(dashboard.into_body(), usize::MAX).await.unwrap();
+    let html = String::from_utf8(body.to_vec()).unwrap();
+    assert!(html.contains("修改管理员密码"));
+    assert!(html.contains("action=\"/admin/password\""));
 
     let save_request = Request::builder()
         .method("POST")
@@ -159,6 +176,166 @@ async fn admin_auth_guard_and_save_note() {
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let html = String::from_utf8(body.to_vec()).unwrap();
     assert!(html.contains("Integration Note"));
+}
+
+#[tokio::test]
+async fn admin_can_change_password_and_old_password_stops_working() {
+    let (_temp, _state, router) = setup().await;
+
+    let login_request = Request::builder()
+        .method("POST")
+        .uri("/admin/login")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body(Body::from("username=admin&password=admin123456"))
+        .unwrap();
+    let response = router.clone().oneshot(login_request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let cookie = response
+        .headers()
+        .get(header::SET_COOKIE)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+
+    let dashboard = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/admin")
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(dashboard.status(), StatusCode::OK);
+    let body = to_bytes(dashboard.into_body(), usize::MAX).await.unwrap();
+    let html = String::from_utf8(body.to_vec()).unwrap();
+    assert!(html.contains("修改管理员密码"));
+    assert!(html.contains("action=\"/admin/password\""));
+
+    let invalid_change = Request::builder()
+        .method("POST")
+        .uri("/admin/password")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::COOKIE, &cookie)
+        .body(Body::from(
+            "current_password=wrong-password&new_password=NewSecurePass123&confirm_password=NewSecurePass123",
+        ))
+        .unwrap();
+    let response = router.clone().oneshot(invalid_change).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let html = String::from_utf8(body.to_vec()).unwrap();
+    assert!(html.contains("当前密码不正确"));
+
+    let too_short_change = Request::builder()
+        .method("POST")
+        .uri("/admin/password")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::COOKIE, &cookie)
+        .body(Body::from(
+            "current_password=Pcsensor1121%40&new_password=short&confirm_password=short",
+        ))
+        .unwrap();
+    let response = router.clone().oneshot(too_short_change).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let html = String::from_utf8(body.to_vec()).unwrap();
+    assert!(html.contains("新密码至少需要 8 个字符"));
+
+    let mismatch_change = Request::builder()
+        .method("POST")
+        .uri("/admin/password")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::COOKIE, &cookie)
+        .body(Body::from(
+            "current_password=Pcsensor1121%40&new_password=NewSecurePass123&confirm_password=OtherSecurePass123",
+        ))
+        .unwrap();
+    let response = router.clone().oneshot(mismatch_change).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let html = String::from_utf8(body.to_vec()).unwrap();
+    assert!(html.contains("两次输入的新密码不一致"));
+
+    let change_password = Request::builder()
+        .method("POST")
+        .uri("/admin/password")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::COOKIE, &cookie)
+        .body(Body::from(
+            "current_password=Pcsensor1121%40&new_password=NewSecurePass123&confirm_password=NewSecurePass123",
+        ))
+        .unwrap();
+    let response = router.clone().oneshot(change_password).await.unwrap();
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(
+        response.headers().get(header::LOCATION).unwrap(),
+        "/admin/login?password=updated"
+    );
+    let cleared_cookie = response
+        .headers()
+        .get(header::SET_COOKIE)
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert!(cleared_cookie.contains("m2w_session="));
+
+    let after_change = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/admin")
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(after_change.status(), StatusCode::SEE_OTHER);
+    assert_eq!(
+        after_change.headers().get(header::LOCATION).unwrap(),
+        "/admin/login"
+    );
+
+    let login_page = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/admin/login?password=updated")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(login_page.status(), StatusCode::OK);
+    let body = to_bytes(login_page.into_body(), usize::MAX).await.unwrap();
+    let html = String::from_utf8(body.to_vec()).unwrap();
+    assert!(html.contains("密码已更新，请使用新密码重新登录"));
+
+    let old_password_login = Request::builder()
+        .method("POST")
+        .uri("/admin/login")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body(Body::from("username=admin&password=admin123456"))
+        .unwrap();
+    let response = router.clone().oneshot(old_password_login).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let html = String::from_utf8(body.to_vec()).unwrap();
+    assert!(html.contains("Invalid username or password"));
+
+    let new_password_login = Request::builder()
+        .method("POST")
+        .uri("/admin/login")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body(Body::from("username=admin&password=NewSecurePass123"))
+        .unwrap();
+    let response = router.oneshot(new_password_login).await.unwrap();
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(response.headers().get(header::LOCATION).unwrap(), "/admin");
 }
 
 #[tokio::test]

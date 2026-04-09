@@ -85,6 +85,16 @@ impl AppDatabase {
         })
     }
 
+    pub fn update_password(&self, username: &str, password: &str) -> AppResult<bool> {
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        let hash = hash_password(password)?;
+        let updated = conn.execute(
+            "UPDATE admin_users SET password_hash = ?1 WHERE username = ?2",
+            params![hash, username],
+        )?;
+        Ok(updated > 0)
+    }
+
     pub fn create_session(&self, username: &str) -> AppResult<String> {
         let conn = self.conn.lock().expect("db mutex poisoned");
         let token: String = rand::thread_rng()
@@ -114,6 +124,15 @@ impl AppDatabase {
     pub fn delete_session(&self, token: &str) -> AppResult<()> {
         let conn = self.conn.lock().expect("db mutex poisoned");
         conn.execute("DELETE FROM sessions WHERE token = ?1", params![token])?;
+        Ok(())
+    }
+
+    pub fn delete_sessions_for_user(&self, username: &str) -> AppResult<()> {
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        conn.execute(
+            "DELETE FROM sessions WHERE username = ?1",
+            params![username],
+        )?;
         Ok(())
     }
 

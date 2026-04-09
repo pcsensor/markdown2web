@@ -48,7 +48,7 @@ impl AppConfig {
             data_dir,
             admin_username: env::var("M2W_ADMIN_USERNAME").unwrap_or_else(|_| "admin".into()),
             admin_password: env::var("M2W_ADMIN_PASSWORD")
-                .unwrap_or_else(|_| "Pcsensor1121@".into()),
+                .unwrap_or_else(|_| "admin123456".into()),
             watch_enabled: env::var("M2W_WATCH_ENABLED")
                 .map(|v| !matches!(v.as_str(), "0" | "false" | "off"))
                 .unwrap_or(true),

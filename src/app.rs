@@ -62,6 +62,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/admin", get(admin::dashboard))
         .route("/admin/login", get(admin::login_page).post(admin::login))
         .route("/admin/logout", post(admin::logout))
+        .route("/admin/password", post(admin::change_password))
         .route("/admin/notes/new", get(admin::new_note_page))
         .route("/admin/notes/{slug}/edit", get(admin::edit_note_page))
         .route("/admin/notes/save", post(admin::save_note))

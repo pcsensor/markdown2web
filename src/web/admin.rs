@@ -3,7 +3,7 @@ use std::fs;
 use askama::Template;
 use axum::{
     Form,
-    extract::{Multipart, Path, State},
+    extract::{Multipart, Path, Query, State},
     response::{Html, IntoResponse, Redirect, Response},
 };
 use axum_extra::extract::cookie::CookieJar;
@@ -25,7 +25,9 @@ use crate::{
 #[template(path = "admin/login.html")]
 struct LoginTemplate {
     site_name: String,
+    username: String,
     error: Option<String>,
+    success: Option<String>,
 }
 
 #[derive(Template)]
@@ -35,6 +37,7 @@ struct DashboardTemplate {
     username: String,
     notes: Vec<Note>,
     build_events: Vec<crate::store::sqlite::BuildEvent>,
+    password_error: Option<String>,
 }
 
 #[derive(Template)]
@@ -74,13 +77,34 @@ pub struct SaveNoteForm {
     body: String,
 }
 
-pub async fn login_page(State(state): State<AppState>, jar: CookieJar) -> AppResult<Response> {
+#[derive(Default, Deserialize)]
+pub struct LoginStatusQuery {
+    password: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct ChangePasswordForm {
+    current_password: String,
+    new_password: String,
+    confirm_password: String,
+}
+
+pub async fn login_page(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Query(query): Query<LoginStatusQuery>,
+) -> AppResult<Response> {
     if auth::current_user(&jar, &state)?.is_some() {
         return Ok(Redirect::to("/admin").into_response());
     }
     render(LoginTemplate {
         site_name: state.config.site_name.clone(),
+        username: state.config.admin_username.clone(),
         error: None,
+        success: match query.password.as_deref() {
+            Some("updated") => Some("密码已更新，请使用新密码重新登录。".into()),
+            _ => None,
+        },
     })
 }
 
@@ -92,7 +116,9 @@ pub async fn login(
     if !state.db.verify_user(&form.username, &form.password)? {
         return render(LoginTemplate {
             site_name: state.config.site_name.clone(),
+            username: form.username,
             error: Some("Invalid username or password".into()),
+            success: None,
         });
     }
     let token = state.db.create_session(&form.username)?;
@@ -118,13 +144,48 @@ pub async fn dashboard(State(state): State<AppState>, jar: CookieJar) -> AppResu
     let Some(user) = auth::current_user(&jar, &state)? else {
         return Ok(Redirect::to("/admin/login").into_response());
     };
-    let site = state.site.read().await.clone();
-    render(DashboardTemplate {
-        site_name: state.config.site_name.clone(),
-        username: user,
-        notes: site.all_notes(),
-        build_events: state.db.recent_builds(12)?,
-    })
+    dashboard_response(&state, user, None).await
+}
+
+pub async fn change_password(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Form(form): Form<ChangePasswordForm>,
+) -> AppResult<Response> {
+    const MIN_PASSWORD_LENGTH: usize = 8;
+
+    let Some(user) = auth::current_user(&jar, &state)? else {
+        return Ok(Redirect::to("/admin/login").into_response());
+    };
+    if !state.db.verify_user(&user, &form.current_password)? {
+        return dashboard_response(&state, user, Some("当前密码不正确。".into())).await;
+    }
+    if form.new_password.trim().is_empty() {
+        return dashboard_response(&state, user, Some("新密码不能为空。".into())).await;
+    }
+    if form.new_password.len() < MIN_PASSWORD_LENGTH {
+        return dashboard_response(
+            &state,
+            user,
+            Some(format!("新密码至少需要 {MIN_PASSWORD_LENGTH} 个字符。")),
+        )
+        .await;
+    }
+    if form.new_password != form.confirm_password {
+        return dashboard_response(&state, user, Some("两次输入的新密码不一致。".into())).await;
+    }
+    if form.new_password == form.current_password {
+        return dashboard_response(&state, user, Some("新密码不能与当前密码相同。".into())).await;
+    }
+    if !state.db.update_password(&user, &form.new_password)? {
+        return Err(AppError::Unauthorized);
+    }
+    state.db.delete_sessions_for_user(&user)?;
+    Ok((
+        jar.remove(auth::clear_session_cookie()),
+        Redirect::to("/admin/login?password=updated"),
+    )
+        .into_response())
 }
 
 pub async fn new_note_page(State(state): State<AppState>, jar: CookieJar) -> AppResult<Response> {
@@ -288,6 +349,21 @@ fn allowed_asset_filename(filename: &str) -> bool {
         ext.as_str(),
         "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "pdf" | "txt" | "zip"
     )
+}
+
+async fn dashboard_response(
+    state: &AppState,
+    user: String,
+    password_error: Option<String>,
+) -> AppResult<Response> {
+    let site = state.site.read().await.clone();
+    render(DashboardTemplate {
+        site_name: state.config.site_name.clone(),
+        username: user,
+        notes: site.all_notes(),
+        build_events: state.db.recent_builds(12)?,
+        password_error,
+    })
 }
 
 fn render<T: Template>(template: T) -> AppResult<Response> {

@@ -15,13 +15,18 @@
   <form class="panel interactive-card auth-panel" action="/admin/login" method="post">
     <p class="eyebrow">Admin</p>
     <h2>登录后台</h2>
+    {% match success %}
+      {% when Some with (message) %}
+        <p class="success-banner">{{ message }}</p>
+      {% when None %}
+      {% endmatch %}
     {% match error %}
       {% when Some with (message) %}
         <p class="error-banner">{{ message }}</p>
       {% when None %}
       {% endmatch %}
-    <label>用户名<input type="text" name="username" value="admin" required /></label>
-    <label>密码<input type="password" name="password" placeholder="" required /></label>
+    <label>用户名<input type="text" name="username" value="{{ username }}" autocomplete="username" required /></label>
+    <label>密码<input type="password" name="password" placeholder="" autocomplete="current-password" required /></label>
     <button type="submit">进入控制台</button>
   </form>
 </section>
