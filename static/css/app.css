@@ -277,6 +277,12 @@ select:focus-visible {
   background: rgba(255,255,255,0.65);
   border: 1px solid var(--line);
   color: var(--muted);
+  transition: transform 200ms cubic-bezier(.2,.75,.2,1), background 200ms ease-out, box-shadow 200ms ease-out;
+}
+.footer-pill:hover {
+  transform: translateY(-2px);
+  background: rgba(255,255,255,0.88);
+  box-shadow: 0 8px 22px rgba(15,23,42,0.06);
 }
 .footer-pill-icon { color: var(--accent-warm); }
 
@@ -349,6 +355,13 @@ select:focus-visible {
   border: 1px solid rgba(217, 225, 236, 0.85);
   color: var(--muted);
   font-size: 0.92rem;
+  transition: transform 200ms cubic-bezier(.2,.75,.2,1), background 200ms ease-out, box-shadow 200ms ease-out, border-color 200ms ease-out;
+}
+.feature-pill:hover {
+  transform: translateY(-2px);
+  background: rgba(255,255,255,0.92);
+  border-color: rgba(143,177,255,0.36);
+  box-shadow: 0 8px 20px rgba(15,23,42,0.08);
 }
 .panel-chip { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; }
 
@@ -360,10 +373,11 @@ select:focus-visible {
 }
 .hero-orb-panel {
   display: grid;
+  grid-template-rows: auto 1fr;
   min-height: 460px;
   padding: 16px;
   isolation: isolate;
-  --orb-zone-size: clamp(176px, 42%, 256px);
+  --orb-zone-size: clamp(140px, 36%, 200px);
   --orb-shift-x: 0;
   --orb-shift-y: 0;
   --orb-tilt-x: 0;
@@ -560,7 +574,7 @@ select:focus-visible {
   display: grid;
   gap: 10px;
   max-width: calc(100% - var(--orb-zone-size) - 18px);
-  min-height: clamp(142px, 28vw, 174px);
+  min-height: calc(var(--orb-zone-size) + 44px);
 }
 
 .metric-card {
@@ -568,6 +582,12 @@ select:focus-visible {
   border-radius: 18px;
   background: rgba(246, 248, 251, 0.8);
   border: 1px solid rgba(217, 225, 236, 0.8);
+  transition: transform 200ms cubic-bezier(.2,.75,.2,1), background 200ms ease-out, box-shadow 200ms ease-out, border-color 200ms ease-out;
+}
+.metric-card:hover {
+  background: rgba(255,255,255,0.95);
+  border-color: rgba(143,177,255,0.32);
+  box-shadow: 0 8px 22px rgba(37,99,235,0.08);
 }
 .metric-card strong { display: block; font-size: 1rem; margin-bottom: 4px; }
 .metric-card span { color: var(--muted); font-size: 0.92rem; }
@@ -577,6 +597,12 @@ select:focus-visible {
   border-radius: 999px;
   background: linear-gradient(135deg, var(--accent-2), var(--accent));
   box-shadow: 0 0 0 6px rgba(20, 184, 166, 0.12);
+  animation: signal-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes signal-pulse {
+  0%, 100% { box-shadow: 0 0 0 6px rgba(20, 184, 166, 0.12); }
+  50% { box-shadow: 0 0 0 10px rgba(20, 184, 166, 0.06), 0 0 16px rgba(20, 184, 166, 0.18); }
 }
 .hero-panel-top { display: flex; justify-content: space-between; align-items: center; }
 .hero-panel-copy { margin: 12px 0 0; font-size: 1.02rem; color: var(--text); }
@@ -729,6 +755,13 @@ select:focus-visible {
   width: 100%;
   height: 4px;
   background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent-warm));
+  background-size: 200% 100%;
+  animation: accent-shift 6s ease-in-out infinite;
+}
+
+@keyframes accent-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
 }
 
 .card-head, .card-foot, .section-head, .panel-title-row, .sidebar-title-row, .note-hero { display: flex; }
@@ -777,6 +810,11 @@ select:focus-visible {
   background: rgba(37, 99, 235, 0.08);
   color: var(--accent);
   font-weight: 700;
+  transition: transform 200ms cubic-bezier(.2,.75,.2,1), background 200ms ease-out;
+}
+.card:hover .arrow-badge {
+  transform: translateX(4px);
+  background: rgba(37, 99, 235, 0.16);
 }
 
 .surface-icon {
@@ -800,7 +838,15 @@ select:focus-visible {
 }
 .enhanced-header { display: flex; gap: 16px; align-items: flex-start; }
 .section-head { justify-content: space-between; align-items: flex-end; margin: 34px 0 18px; }
-.section-link { color: var(--muted); font-weight: 600; }
+.section-link {
+  color: var(--muted);
+  font-weight: 600;
+  transition: color 200ms ease-out, transform 200ms ease-out;
+}
+.section-link:hover {
+  color: var(--accent);
+  transform: translateX(3px);
+}
 
 .tag-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
 .tag {
@@ -810,6 +856,14 @@ select:focus-visible {
   color: var(--accent);
   font-size: 0.9rem;
   border: 1px solid rgba(116,154,255,0.22);
+  transition: transform 200ms cubic-bezier(.2,.75,.2,1), background 200ms ease-out, box-shadow 200ms ease-out, border-color 200ms ease-out, color 200ms ease-out;
+}
+.tag:hover {
+  transform: translateY(-2px) scale(1.05);
+  background: linear-gradient(135deg, rgba(37,99,235,0.18), rgba(20,184,166,0.14));
+  border-color: rgba(116,154,255,0.42);
+  box-shadow: 0 6px 18px rgba(37,99,235,0.14);
+  color: #1d4ed8;
 }
 
 .list-card { display: flex; justify-content: space-between; align-items: center; gap: 18px; }
@@ -1034,6 +1088,42 @@ button.secondary, .button.secondary {
   margin: 0;
 }
 
+/* 卡片指针追踪光效 */
+.card::after,
+.list-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(320px circle at var(--card-glow-x, 50%) var(--card-glow-y, 50%), rgba(37,99,235,0.06), transparent 60%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 300ms ease-out;
+  z-index: 0;
+}
+.card:hover::after,
+.list-card:hover::after {
+  opacity: 1;
+}
+
+/* 品牌标记悬浮动效 */
+.brand-mark {
+  transition: transform 300ms cubic-bezier(.2,.75,.2,1), box-shadow 300ms ease-out;
+}
+.brand:hover .brand-mark {
+  transform: rotate(-6deg) scale(1.08);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.65), 0 8px 20px rgba(37,99,235,0.12);
+}
+
+/* 页面加载淡入 */
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.page-shell {
+  animation: page-enter 400ms cubic-bezier(.2,.7,.2,1) both;
+}
+
 @media (max-width: 980px) {
   .hero-grid,
   .note-layout,
@@ -1048,28 +1138,29 @@ button.secondary, .button.secondary {
   .list-card, .note-hero { flex-direction: column; align-items: stretch; }
   .list-card-side { justify-content: flex-start; }
   .hero-orb-panel {
-    min-height: 448px;
+    min-height: 420px;
+    --orb-zone-size: 140px;
   }
 
   .hero-orb-panel::after {
     inset: 24px auto auto 50%;
-    width: 212px;
-    height: 196px;
+    width: 170px;
+    height: 160px;
     transform: translateX(-50%);
   }
 
   .hero-orb-panel > .hero-orb-scene {
-    top: 40px;
+    top: 32px;
     left: 50%;
     right: auto;
-    width: 176px;
+    width: 140px;
     transform: translateX(-50%);
   }
 
   .hero-panel-copy-block {
     max-width: none;
     min-height: 0;
-    padding-top: 182px;
+    padding-top: 160px;
   }
 }
 

@@ -280,6 +280,19 @@ function wireButtons() {
   });
 }
 
+function wireCardGlow() {
+  if (prefersReducedMotion() || !hasFinePointer()) return;
+  document.querySelectorAll('.card, .list-card').forEach((card) => {
+    card.addEventListener('pointermove', (event) => {
+      const rect = card.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      card.style.setProperty('--card-glow-x', `${x}px`);
+      card.style.setProperty('--card-glow-y', `${y}px`);
+    });
+  });
+}
+
 function wireCodeBlocks() {
   document.querySelectorAll('.prose pre').forEach((block) => {
     if (block.querySelector('.copy-code-button')) return;
@@ -349,6 +362,7 @@ function init() {
   wireCursorBeacon();
   wireOrbitalFocus();
   wireButtons();
+  wireCardGlow();
   renderMath();
   wireCodeBlocks();
 }
