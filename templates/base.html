@@ -42,7 +42,12 @@
           </span>
           <span>{{ site_name }}</span>
         </a>
-        <nav class="nav-links">
+        <button class="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false" data-nav-toggle>
+          <span class="nav-toggle-bar"></span>
+          <span class="nav-toggle-bar"></span>
+          <span class="nav-toggle-bar"></span>
+        </button>
+        <nav class="nav-links" data-nav-menu>
           <a class="nav-link" href="/">
             <span class="nav-icon" aria-hidden="true">
               <svg viewBox="0 0 20 20" fill="none"><path d="M3 9.2 10 3l7 6.2V17H3V9.2Z" /><path d="M8 17v-4h4v4" /></svg>
@@ -76,6 +81,7 @@
         </nav>
       </div>
     </header>
+    <div class="nav-overlay" data-nav-overlay aria-hidden="true"></div>
 
     <main class="shell page-shell {% block main_class %}{% endblock %}">
       {% block content %}{% endblock %}

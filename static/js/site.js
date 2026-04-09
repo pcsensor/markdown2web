@@ -1076,6 +1076,46 @@ function wireNoteAnnotations() {
   loadAnnotations();
 }
 
+function wireMobileNav() {
+  const toggle = document.querySelector('[data-nav-toggle]');
+  const menu = document.querySelector('[data-nav-menu]');
+  const overlay = document.querySelector('[data-nav-overlay]');
+  if (!toggle || !menu) return;
+
+  const isOpen = () => toggle.getAttribute('aria-expanded') === 'true';
+
+  const openMenu = () => {
+    toggle.setAttribute('aria-expanded', 'true');
+    menu.classList.add('is-open');
+    if (overlay) overlay.classList.add('is-visible');
+    document.body.style.overflow = 'hidden';
+  };
+
+  const closeMenu = () => {
+    toggle.setAttribute('aria-expanded', 'false');
+    menu.classList.remove('is-open');
+    if (overlay) overlay.classList.remove('is-visible');
+    document.body.style.overflow = '';
+  };
+
+  toggle.addEventListener('click', () => {
+    if (isOpen()) closeMenu();
+    else openMenu();
+  });
+
+  if (overlay) {
+    overlay.addEventListener('click', closeMenu);
+  }
+
+  menu.querySelectorAll('.nav-link').forEach((link) => {
+    link.addEventListener('click', closeMenu);
+  });
+
+  window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && isOpen()) closeMenu();
+  });
+}
+
 function init() {
   document.body.classList.add('js-ready');
   markCurrentNav();
@@ -1088,6 +1128,7 @@ function init() {
   renderMath();
   wireNoteAnnotations();
   wireCodeBlocks();
+  wireMobileNav();
 }
 
 if (document.readyState === 'loading') {

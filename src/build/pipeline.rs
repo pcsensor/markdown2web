@@ -1,5 +1,7 @@
 use std::{collections::HashSet, sync::Arc};
 
+use chrono::{DateTime, FixedOffset, Utc};
+
 use tokio::sync::{Mutex, RwLock};
 
 use crate::{
@@ -73,6 +75,24 @@ impl BuildService {
             all_assets.extend(rewritten.assets);
             broken_links.extend(rewritten.broken_links);
             new_hashes.insert(source.slug.clone(), source.hash.clone());
+            // Compute last modification time from the source markdown file to display
+            // the actual file's last modified timestamp instead of the build time.
+            let updated_at = {
+                match std::fs::metadata(&source.source_path) {
+                    Ok(meta) => match meta.modified() {
+                        Ok(mtime) => {
+                            // Convert SystemTime -> DateTime<Utc>, then to CST (UTC+8)
+                            let dt_utc: DateTime<Utc> = DateTime::<Utc>::from(mtime);
+                            dt_utc
+                                .with_timezone(&FixedOffset::east_opt(8 * 3600).expect("UTC+8 is valid"))
+                                .format("%Y-%m-%d %H:%M")
+                                .to_string()
+                        }
+                        Err(_) => time::now_cst_display(),
+                    },
+                    Err(_) => time::now_cst_display(),
+                }
+            };
             notes.push(Note {
                 title: source.title,
                 slug: source.slug,
@@ -86,7 +106,7 @@ impl BuildService {
                 headings,
                 outbound_links: rewritten.outbound_links,
                 asset_refs: note_assets,
-                updated_at: time::now_cst_display(),
+                updated_at,
                 word_count: word_count(&source.body),
             });
         }
