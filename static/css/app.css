@@ -1324,6 +1324,10 @@ button.secondary, .button.secondary {
   color: var(--text);
   border: 1px solid rgba(217,225,236,0.92);
 }
+.annotation-toolbar-button.danger {
+  background: linear-gradient(135deg, var(--danger), #e53e3e);
+  color: white;
+}
 .annotation-color-input {
   width: 42px;
   min-width: 42px;

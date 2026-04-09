@@ -347,6 +347,7 @@ function wireNoteAnnotations() {
   const enabled = article.dataset.annotationEnabled === 'true';
   const highlightButton = toolbar.querySelector('[data-annotation-highlight]');
   const commentButton = toolbar.querySelector('[data-annotation-comment]');
+  const deleteCommentButton = toolbar.querySelector('[data-annotation-delete-comment]');
   const colorInput = toolbar.querySelector('[data-annotation-color]');
   const modalQuote = modal.querySelector('[data-annotation-modal-quote]');
   const modalInput = modal.querySelector('[data-annotation-comment-input]');
@@ -425,9 +426,11 @@ function wireNoteAnnotations() {
   const updateToolbarState = () => {
     const annotation = state.pending?.annotation ?? null;
     const hasHighlight = Boolean(annotation?.color);
+    const hasComment = Boolean(annotation?.comment);
     highlightButton.textContent = hasHighlight ? '取消高亮' : '高亮';
-    commentButton.textContent = annotation?.comment ? '编辑评论' : '评论';
+    commentButton.textContent = hasComment ? '编辑评论' : '评论';
     colorInput.value = annotation?.color || colorInput.value || '#fde68a';
+    if (deleteCommentButton) deleteCommentButton.hidden = !hasComment;
   };
 
   const showToolbarForPending = (pending, rect) => {
@@ -935,6 +938,26 @@ function wireNoteAnnotations() {
 
   highlightButton.addEventListener('click', handleHighlightAction);
   commentButton.addEventListener('click', handleCommentAction);
+  if (deleteCommentButton) {
+    deleteCommentButton.addEventListener('click', () => {
+      const pending = state.pending;
+      if (!pending?.annotation?.comment) return;
+      const annotation = pending.annotation;
+      commit(async () => {
+        if (annotation.color) {
+          // 保留高亮，仅清除评论
+          await saveAnnotation('PUT', `/api/annotations/${annotation.id}`, {
+            color: annotation.color,
+            comment: null,
+            visibility: 'private',
+          });
+        } else {
+          // 没有高亮，整条记录删除
+          await deleteAnnotation(annotation.id);
+        }
+      });
+    });
+  }
   modalSave.addEventListener('click', () => {
     closeCommentModal({
       comment: modalInput.value,
