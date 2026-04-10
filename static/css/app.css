@@ -1291,6 +1291,18 @@ button.secondary, .button.secondary {
   display: grid;
   gap: 16px;
 }
+.auth-switch {
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+.auth-switch a {
+  color: var(--primary);
+  text-decoration: none;
+}
+.auth-switch a:hover {
+  text-decoration: underline;
+}
 .account-panel { min-width: 0; }
 .account-pill {
   display: grid;

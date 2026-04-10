@@ -1208,6 +1208,34 @@ function init() {
   wireNoteAnnotations();
   wireCodeBlocks();
   wireMobileNav();
+  wireAccountToggle();
+}
+
+function wireAccountToggle() {
+  const loginPanel = document.getElementById('login-panel');
+  const registerPanel = document.getElementById('register-panel');
+  const showRegister = document.getElementById('show-register');
+  const showLogin = document.getElementById('show-login');
+  if (!loginPanel || !registerPanel || !showRegister || !showLogin) return;
+
+  const switchTo = (target) => {
+    loginPanel.style.display = target === 'login' ? '' : 'none';
+    registerPanel.style.display = target === 'register' ? '' : 'none';
+    // Re-render Turnstile when panel becomes visible
+    if (window.turnstile) {
+      window.turnstile.reset();
+    }
+  };
+
+  showRegister.addEventListener('click', (e) => {
+    e.preventDefault();
+    switchTo('register');
+  });
+
+  showLogin.addEventListener('click', (e) => {
+    e.preventDefault();
+    switchTo('login');
+  });
 }
 
 if (document.readyState === 'loading') {
