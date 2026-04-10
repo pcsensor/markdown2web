@@ -1166,15 +1166,8 @@ function wireTocScrollSpy() {
     });
     if (index >= 0) {
       const activeLink = headings[index].link;
-      const linkTop = activeLink.offsetTop - tocList.offsetTop;
-      const linkBottom = linkTop + activeLink.offsetHeight;
-      const viewTop = tocList.scrollTop;
-      const viewBottom = viewTop + tocList.clientHeight;
-      if (linkBottom > viewBottom - 8) {
-        tocList.scrollTo({ top: linkBottom - tocList.clientHeight + 8, behavior: 'smooth' });
-      } else if (linkTop < viewTop + 8) {
-        tocList.scrollTo({ top: linkTop - 8, behavior: 'smooth' });
-      }
+      const linkCenter = activeLink.offsetTop - tocList.offsetTop + activeLink.offsetHeight / 2;
+      tocList.scrollTop = linkCenter - tocList.clientHeight / 2;
     }
   };
 
