@@ -1141,6 +1141,7 @@ select:focus-visible {
 }
 .toc-list, .link-list, .build-log { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
 .toc-list a, .link-list a { color: var(--text); }
+.toc-sticky-panel .toc-list { max-height: 50vh; overflow-y: auto; scroll-behavior: smooth; }
 .toc-list a {
   display: inline-block;
   font-size: 0.97rem;

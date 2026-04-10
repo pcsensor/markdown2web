@@ -738,6 +738,7 @@ const updateToolbarState = () => {
 
     wireCodeBlocks();
     layoutComments();
+    window.dispatchEvent(new CustomEvent('note-content-rendered'));
   };
 
   const loadAnnotations = async () => {
@@ -1132,50 +1133,74 @@ function wireMobileNav() {
 
 
 function wireTocScrollSpy() {
-  const tocPanel = document.querySelector('.toc-sticky-panel');
+  const tocList = document.querySelector('.toc-sticky-panel .toc-list');
   const tocLinks = document.querySelectorAll('.toc-list a');
-  if (!tocLinks.length) return;
+  if (!tocLinks.length || !tocList) return;
 
-  const headings = [];
-  tocLinks.forEach((link) => {
-    const href = link.getAttribute('href');
-    if (!href || !href.startsWith('#')) return;
-    const id = href.slice(1);
-    const el = document.getElementById(id);
-    if (el) headings.push({ el, link });
-  });
+  let headings = [];
+
+  const collectHeadings = () => {
+    headings = [];
+    tocLinks.forEach((link) => {
+      const href = link.getAttribute('href');
+      if (!href || !href.startsWith('#')) return;
+      const id = href.slice(1);
+      const anchor = document.getElementById(id);
+      if (!anchor) return;
+      const el = anchor.closest('h1, h2, h3, h4, h5, h6');
+      if (!el) return;
+      headings.push({ el, link });
+    });
+  };
+
+  collectHeadings();
   if (!headings.length) return;
 
-  const offset = 120;
+  let activeIndex = 0;
 
-  const update = () => {
-    let activeIndex = -1;
-    for (let i = headings.length - 1; i >= 0; i--) {
-      const rect = headings[i].el.getBoundingClientRect();
-      if (rect.top <= offset) {
-        activeIndex = i;
-        break;
-      }
-    }
-
+  const setActive = (index) => {
+    if (index === activeIndex) return;
+    activeIndex = index;
     headings.forEach((h, i) => {
-      h.link.classList.toggle('is-active', i === activeIndex);
+      h.link.classList.toggle('is-active', i === index);
     });
-
-    if (activeIndex >= 0 && tocPanel) {
-      const activeLink = headings[activeIndex].link;
-      const panelRect = tocPanel.getBoundingClientRect();
-      const linkRect = activeLink.getBoundingClientRect();
-      if (linkRect.bottom > panelRect.bottom || linkRect.top < panelRect.top) {
-        activeLink.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    if (index >= 0) {
+      const activeLink = headings[index].link;
+      const linkTop = activeLink.offsetTop - tocList.offsetTop;
+      const linkBottom = linkTop + activeLink.offsetHeight;
+      const viewTop = tocList.scrollTop;
+      const viewBottom = viewTop + tocList.clientHeight;
+      if (linkBottom > viewBottom - 8) {
+        tocList.scrollTo({ top: linkBottom - tocList.clientHeight + 8, behavior: 'smooth' });
+      } else if (linkTop < viewTop + 8) {
+        tocList.scrollTo({ top: linkTop - 8, behavior: 'smooth' });
       }
     }
   };
 
+  const TARGET = 100;
+
+  const update = () => {
+    if (!headings.length) return;
+    let found = -1;
+    for (let i = headings.length - 1; i >= 0; i--) {
+      const rect = headings[i].el.getBoundingClientRect();
+      if (rect.top <= TARGET) {
+        found = i;
+        break;
+      }
+    }
+    setActive(found >= 0 ? found : 0);
+  };
+
   update();
   window.addEventListener('scroll', update, { passive: true });
-}
 
+  window.addEventListener('note-content-rendered', () => {
+    collectHeadings();
+    if (headings.length) update();
+  });
+}
 function init() {
   document.body.classList.add('js-ready');
   markCurrentNav();
