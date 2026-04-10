@@ -497,10 +497,11 @@ pub async fn save_note(
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| slugify(&form.title));
     let front_matter = FrontMatter {
-        title: Some(form.title),
+        title: Some(form.title.clone()),
         slug: Some(slug.clone()),
         summary: form.summary,
         tags: csv_to_vec(form.tags.as_deref().unwrap_or_default()),
+        category: None,
         status: Some(form.status.unwrap_or_else(|| "published".into())),
         aliases: csv_to_vec(form.aliases.as_deref().unwrap_or_default()),
     };

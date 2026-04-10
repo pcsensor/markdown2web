@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use comrak::{
-    Options, Plugins, markdown_to_html_with_plugins, plugins::syntect::SyntectAdapterBuilder,
+    markdown_to_html_with_plugins, plugins::syntect::SyntectAdapterBuilder, Options, Plugins,
 };
 use regex::Regex;
 

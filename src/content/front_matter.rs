@@ -8,6 +8,8 @@ pub struct FrontMatter {
     pub slug: Option<String>,
     pub summary: Option<String>,
     #[serde(default)]
+    pub category: Option<String>,
+    #[serde(default)]
     pub tags: Vec<String>,
     pub status: Option<String>,
     #[serde(default)]

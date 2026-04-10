@@ -93,6 +93,8 @@ impl BuildService {
                     Err(_) => time::now_cst_display(),
                 }
             };
+            // Prepare a clone for created_at before moving updated_at into Note
+            let updated_at_clone = updated_at.clone();
             notes.push(Note {
                 title: source.title,
                 slug: source.slug,
@@ -100,6 +102,7 @@ impl BuildService {
                 tags: source.tags,
                 status: source.status,
                 aliases: source.aliases,
+                category: source.category,
                 source_path: source.source_path.to_string_lossy().to_string(),
                 raw_markdown: source.body.clone(),
                 html,
@@ -107,6 +110,7 @@ impl BuildService {
                 outbound_links: rewritten.outbound_links,
                 asset_refs: note_assets,
                 updated_at,
+                created_at: updated_at_clone,
                 word_count: word_count(&source.body),
             });
         }

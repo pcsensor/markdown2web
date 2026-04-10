@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Category {{ category }} · {{ site_name }}{% endblock %}
+{% block content %}
+<section class="stack-header enhanced-header">
+  <div class="header-icon" aria-hidden="true">
+    <svg viewBox="0 0 20 20" fill="none"><path d="M4 7.5V4h3.5l8 8-3.5 3.5-8-8Z" /><circle cx="7.2" cy="7" r=".9" fill="currentColor" stroke="none" /></svg>
+  </div>
+  <div>
+    <p class="eyebrow">Category view</p>
+    <h1>Category {{ category }}</h1>
+    <p class="muted">聚合同一类别下的笔记内容。</p>
+  </div>
+ </section>
+<div class="stack-list">
+  {% for note in notes %}
+  <article class="list-card interactive-card">
+    <div class="list-card-body">
+      <h2><a href="/notes/{{ note.slug }}">{{ note.title }}</a></h2>
+      <p>{{ note.summary }}</p>
+    </div>
+    <div class="list-card-side">
+      <span class="arrow-badge">→</span>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+{% endblock %}

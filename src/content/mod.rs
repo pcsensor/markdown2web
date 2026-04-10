@@ -20,6 +20,7 @@ pub struct NoteSource {
     pub title: String,
     pub slug: String,
     pub summary: String,
+    pub category: String,
     pub tags: Vec<String>,
     pub status: String,
     pub aliases: Vec<String>,
@@ -55,6 +56,7 @@ pub struct Note {
     pub tags: Vec<String>,
     pub status: String,
     pub aliases: Vec<String>,
+    pub category: String,
     pub source_path: String,
     pub raw_markdown: String,
     pub html: String,
@@ -62,6 +64,7 @@ pub struct Note {
     pub outbound_links: Vec<String>,
     pub asset_refs: Vec<AssetRecord>,
     pub updated_at: String,
+    pub created_at: String,
     pub word_count: usize,
 }
 
@@ -92,12 +95,16 @@ impl SiteData {
     }
 
     pub fn published_notes(&self) -> Vec<Note> {
-        self.ordered_slugs
+        let mut notes = self
+            .ordered_slugs
             .iter()
             .filter_map(|slug| self.notes.get(slug))
             .filter(|note| note.is_published())
             .cloned()
-            .collect()
+            .collect::<Vec<_>>();
+        // Sort notes by updated_at in descending order (newest first)
+        notes.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        notes
     }
 
     pub fn note(&self, slug: &str) -> Option<Note> {

@@ -6,9 +6,9 @@ use walkdir::WalkDir;
 use crate::{
     config::AppConfig,
     content::{
-        NoteSource,
-        front_matter::{FrontMatter, parse_front_matter},
+        front_matter::{parse_front_matter, FrontMatter},
         markdown::slugify,
+        NoteSource,
     },
     error::AppResult,
 };
@@ -66,11 +66,13 @@ pub fn discover_notes(config: &AppConfig) -> AppResult<Vec<NoteSource>> {
                 tags: front_matter.tags.clone(),
                 status: front_matter.status.clone(),
                 aliases: front_matter.aliases.clone(),
+                category: front_matter.category.clone(),
             },
             body,
             title,
             slug,
             summary,
+            category: front_matter.category.clone().unwrap_or_default(),
             tags: front_matter.tags,
             status: front_matter.status.unwrap_or_else(|| "published".into()),
             aliases: front_matter.aliases,

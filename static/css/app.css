@@ -835,6 +835,7 @@ select:focus-visible {
 }
 
 .tag-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.category-row { display: flex; flex-wrap: wrap; gap: 12px; margin: 28px 0 24px; }
 .tag {
   padding: 7px 12px;
   border-radius: 999px;
@@ -849,6 +850,23 @@ select:focus-visible {
   background: linear-gradient(135deg, rgba(37,99,235,0.18), rgba(20,184,166,0.14));
   border-color: rgba(116,154,255,0.42);
   box-shadow: 0 6px 18px rgba(37,99,235,0.14);
+  color: #1d4ed8;
+}
+.category-tag {
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(37,99,235,0.14), rgba(20,184,166,0.12));
+  color: var(--accent);
+  font-size: 1rem;
+  font-weight: 500;
+  border: 1.5px solid rgba(116,154,255,0.3);
+  transition: transform 200ms cubic-bezier(.2,.75,.2,1), background 200ms ease-out, box-shadow 200ms ease-out, border-color 200ms ease-out, color 200ms ease-out;
+}
+.category-tag:hover {
+  transform: translateY(-2px) scale(1.08);
+  background: linear-gradient(135deg, rgba(37,99,235,0.24), rgba(20,184,166,0.2));
+  border-color: rgba(116,154,255,0.5);
+  box-shadow: 0 8px 22px rgba(37,99,235,0.18);
   color: #1d4ed8;
 }
 

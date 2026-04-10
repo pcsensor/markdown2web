@@ -11,6 +11,13 @@
     <p class="muted">按内容结构浏览你的 Markdown 知识库。</p>
   </div>
 </section>
+{% if !categories.is_empty() %}
+<div class="category-row">
+  {% for category in categories %}
+  <a class="category-tag" href="/categories/{{ category }}">{{ category }}</a>
+  {% endfor %}
+  </div>
+{% endif %}
 <div class="stack-list">
   {% for note in notes %}
   <article class="list-card interactive-card">

@@ -52,12 +52,13 @@ pub fn build_router(state: AppState) -> Router {
     let static_service = ServeDir::new("static");
     let assets_service = ServeDir::new(state.config.generated_assets_dir.clone());
 
-    Router::new()
+        Router::new()
         .route("/", get(public::home))
         .route("/health", get(public::health))
         .route("/notes", get(public::notes_index))
         .route("/notes/{slug}", get(public::note_detail))
         .route("/tags/{tag}", get(public::tag_detail))
+        .route("/categories/{category}", get(public::category_detail))
         .route("/search", get(public::search))
         .route("/account", get(account::account_page))
         .route("/account/register", post(account::register))

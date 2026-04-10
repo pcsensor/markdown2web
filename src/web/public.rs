@@ -34,6 +34,7 @@ struct NotesTemplate {
     site_name: String,
     title: String,
     notes: Vec<Note>,
+    categories: Vec<String>,
 }
 
 #[derive(Template)]
@@ -53,6 +54,15 @@ struct NoteTemplate {
 struct TagTemplate {
     site_name: String,
     tag: String,
+    notes: Vec<Note>,
+}
+
+// Category template: mirrors TagTemplate but for category-based notes view
+#[derive(Template)]
+#[template(path = "category.html")]
+struct CategoryTemplate {
+    site_name: String,
+    category: String,
     notes: Vec<Note>,
 }
 
@@ -85,10 +95,25 @@ pub async fn health(State(state): State<AppState>) -> impl IntoResponse {
 
 pub async fn notes_index(State(state): State<AppState>) -> AppResult<Html<String>> {
     let site = state.site.read().await.clone();
+    let notes = site.published_notes();
+    let mut categories: Vec<String> = notes
+        .iter()
+        .filter_map(|note| {
+            if !note.category.is_empty() {
+                Some(note.category.clone())
+            } else {
+                None
+            }
+        })
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    categories.sort();
     render(NotesTemplate {
         site_name: state.config.site_name.clone(),
         title: "All Notes".into(),
-        notes: site.published_notes(),
+        notes,
+        categories,
     })
 }
 
@@ -145,6 +170,24 @@ pub async fn tag_detail(
     render(TagTemplate {
         site_name: state.config.site_name.clone(),
         tag,
+        notes,
+    })
+}
+
+// Category detail page: show all published notes for a given category
+pub async fn category_detail(
+    Path(category): Path<String>,
+    State(state): State<AppState>,
+) -> AppResult<Html<String>> {
+    let site = state.site.read().await.clone();
+    let notes = site
+        .published_notes()
+        .into_iter()
+        .filter(|note| note.category == category)
+        .collect();
+    render(CategoryTemplate {
+        site_name: state.config.site_name.clone(),
+        category,
         notes,
     })
 }
