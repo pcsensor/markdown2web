@@ -98,13 +98,7 @@ pub async fn notes_index(State(state): State<AppState>) -> AppResult<Html<String
     let notes = site.published_notes();
     let mut categories: Vec<String> = notes
         .iter()
-        .filter_map(|note| {
-            if !note.category.is_empty() {
-                Some(note.category.clone())
-            } else {
-                None
-            }
-        })
+        .flat_map(|note| note.category.iter().cloned())
         .collect::<std::collections::BTreeSet<_>>()
         .into_iter()
         .collect();
@@ -183,7 +177,7 @@ pub async fn category_detail(
     let notes = site
         .published_notes()
         .into_iter()
-        .filter(|note| note.category == category)
+        .filter(|note| note.category.contains(&category))
         .collect();
     render(CategoryTemplate {
         site_name: state.config.site_name.clone(),

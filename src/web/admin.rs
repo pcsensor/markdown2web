@@ -508,7 +508,7 @@ pub async fn edit_note_page(
             slug: front_matter.slug.unwrap_or(note.slug),
             summary: front_matter.summary.unwrap_or(note.summary),
             tags: front_matter.tags.join(", "),
-            category: front_matter.category.unwrap_or_default(),
+            category: front_matter.category.join(", "),
             status: front_matter.status.unwrap_or(note.status),
             aliases: front_matter.aliases.join(", "),
             body,
@@ -533,7 +533,7 @@ pub async fn save_note(
         slug: Some(slug.clone()),
         summary: form.summary,
         tags: csv_to_vec(form.tags.as_deref().unwrap_or_default()),
-        category: form.category.filter(|v| !v.trim().is_empty()),
+        category: csv_to_vec(form.category.as_deref().unwrap_or_default()),
         status: Some(form.status.unwrap_or_else(|| "published".into())),
         aliases: csv_to_vec(form.aliases.as_deref().unwrap_or_default()),
     };

@@ -2,7 +2,9 @@
 title: clutters
 slug: clutters
 summary: 各种问题......
-category: daily
+category:
+- daily
+- study
 tags:
 - issues
 - study

@@ -78,12 +78,17 @@ pub fn render_markdown(markdown: &str) -> AppResult<(String, Vec<Heading>)> {
 }
 
 fn extract_headings_from_html(html: &str) -> Vec<Heading> {
-    let re = Regex::new(r#"<h([1-6])>.+?id="([^"]+)".+?</h[1-6]>"#)
-        .expect("valid heading regex");
+    let re = Regex::new(r#"<h([1-6])>.+?id="([^"]+)".+?</h[1-6]>"#).expect("valid heading regex");
     re.captures_iter(html)
         .map(|caps| {
-            let level = caps.get(1).map(|m| m.as_str().parse().unwrap_or(1)).unwrap_or(1);
-            let id = caps.get(2).map(|m| m.as_str().to_string()).unwrap_or_default();
+            let level = caps
+                .get(1)
+                .map(|m| m.as_str().parse().unwrap_or(1))
+                .unwrap_or(1);
+            let id = caps
+                .get(2)
+                .map(|m| m.as_str().to_string())
+                .unwrap_or_default();
             let title = strip_html_tags(caps.get(0).map(|m| m.as_str()).unwrap_or_default());
             Heading { level, id, title }
         })

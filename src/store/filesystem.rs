@@ -72,7 +72,7 @@ pub fn discover_notes(config: &AppConfig) -> AppResult<Vec<NoteSource>> {
             title,
             slug,
             summary,
-            category: front_matter.category.clone().unwrap_or_default(),
+            category: front_matter.category.clone(),
             tags: front_matter.tags,
             status: front_matter.status.unwrap_or_else(|| "published".into()),
             aliases: front_matter.aliases,

@@ -1,6 +1,25 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::{error::AppError, error::AppResult};
+
+fn deserialize_string_or_vec<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum StringOrVec {
+        One(String),
+        Many(Vec<String>),
+    }
+
+    let opt = Option::<StringOrVec>::deserialize(deserializer).map_err(serde::de::Error::custom)?;
+    match opt {
+        Some(StringOrVec::One(s)) => Ok(vec![s]),
+        Some(StringOrVec::Many(v)) => Ok(v),
+        None => Ok(vec![]),
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct FrontMatter {
@@ -8,7 +27,8 @@ pub struct FrontMatter {
     pub slug: Option<String>,
     pub summary: Option<String>,
     #[serde(default)]
-    pub category: Option<String>,
+    #[serde(deserialize_with = "deserialize_string_or_vec")]
+    pub category: Vec<String>,
     #[serde(default)]
     pub tags: Vec<String>,
     pub status: Option<String>,
