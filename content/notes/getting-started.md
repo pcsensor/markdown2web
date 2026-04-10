@@ -2,7 +2,7 @@
 title: Getting Started
 slug: getting-started
 summary: Learn how content, uploads, and auto rebuilds work.
-category: test
+category: null
 tags:
 - guide
 - rust
