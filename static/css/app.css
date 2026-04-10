@@ -900,7 +900,11 @@ select:focus-visible {
 }
 .note-article { grid-area: article; position: relative; overflow: visible; }
 .note-article-body { position: relative; z-index: 1; }
-.note-sidebar { grid-area: sidebar; display: grid; gap: 16px; }
+.note-sidebar { grid-area: sidebar; display: flex; flex-direction: column; gap: 16px; align-self: stretch; }
+.toc-sticky-panel {
+  position: sticky;
+  top: 96px;
+}
 .annotation-rail { grid-area: rail; position: relative; min-width: 0; }
 .annotation-rail-card {
   position: sticky;

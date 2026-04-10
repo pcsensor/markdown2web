@@ -57,7 +57,6 @@ pub fn extract_headings(markdown: &str) -> Vec<Heading> {
 }
 
 pub fn render_markdown(markdown: &str) -> AppResult<(String, Vec<Heading>)> {
-    let headings = extract_headings(markdown);
     let mut options = Options::default();
     options.extension.table = true;
     options.extension.autolink = true;
@@ -74,7 +73,28 @@ pub fn render_markdown(markdown: &str) -> AppResult<(String, Vec<Heading>)> {
     plugins.render.codefence_syntax_highlighter = Some(&adapter);
 
     let html = markdown_to_html_with_plugins(markdown, &options, &plugins);
+    let headings = extract_headings_from_html(&html);
     Ok((html, headings))
+}
+
+fn extract_headings_from_html(html: &str) -> Vec<Heading> {
+    let re = Regex::new(r#"<h([1-6])>.+?id="([^"]+)".+?</h[1-6]>"#)
+        .expect("valid heading regex");
+    re.captures_iter(html)
+        .map(|caps| {
+            let level = caps.get(1).map(|m| m.as_str().parse().unwrap_or(1)).unwrap_or(1);
+            let id = caps.get(2).map(|m| m.as_str().to_string()).unwrap_or_default();
+            let title = strip_html_tags(caps.get(0).map(|m| m.as_str()).unwrap_or_default());
+            Heading { level, id, title }
+        })
+        .collect()
+}
+
+fn strip_html_tags(input: &str) -> String {
+    Regex::new(r"<[^>]*>")
+        .expect("valid tag regex")
+        .replace_all(input, "")
+        .to_string()
 }
 
 pub fn word_count(markdown: &str) -> usize {
@@ -114,5 +134,30 @@ fn main() {}
         )
         .unwrap();
         assert!(html.contains("language-rust"));
+    }
+
+    #[test]
+    fn toc_headings_match_rendered_html_ids() {
+        let markdown = r#"# First Heading
+
+Some content.
+
+## Second Heading
+
+More content.
+
+### Second Heading
+
+Duplicate heading test.
+"#;
+        let (html, headings) = render_markdown(markdown).unwrap();
+
+        for heading in &headings {
+            assert!(
+                html.contains(&format!("id=\"{}\"", heading.id)),
+                "TOC heading id '{}' not found in rendered HTML",
+                heading.id
+            );
+        }
     }
 }

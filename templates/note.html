@@ -70,20 +70,6 @@
     <div class="sidebar-card interactive-card sidebar-panel">
       <div class="sidebar-title-row">
         <span class="surface-icon small" aria-hidden="true">
-          <svg viewBox="0 0 20 20" fill="none"><path d="M5 6h10M5 10h10M5 14h6" /></svg>
-        </span>
-        <h2>目录</h2>
-      </div>
-      <ul class="toc-list">
-        {% for heading in note.headings %}
-        <li class="toc-level-{{ heading.level }}"><a href="#{{ heading.id }}">{{ heading.title }}</a></li>
-        {% endfor %}
-      </ul>
-    </div>
-
-    <div class="sidebar-card interactive-card sidebar-panel">
-      <div class="sidebar-title-row">
-        <span class="surface-icon small" aria-hidden="true">
           <svg viewBox="0 0 20 20" fill="none"><path d="M8 5 4 9l4 4" /><path d="M12 5l4 4-4 4" /><path d="M7 15h6" /></svg>
         </span>
         <h2>Backlinks</h2>
@@ -95,6 +81,20 @@
         {% if backlinks.len() == 0 %}
         <li class="muted">暂无反向链接</li>
         {% endif %}
+      </ul>
+    </div>
+
+    <div class="sidebar-card interactive-card sidebar-panel toc-sticky-panel">
+      <div class="sidebar-title-row">
+        <span class="surface-icon small" aria-hidden="true">
+          <svg viewBox="0 0 20 20" fill="none"><path d="M5 6h10M5 10h10M5 14h6" /></svg>
+        </span>
+        <h2>目录</h2>
+      </div>
+      <ul class="toc-list">
+        {% for heading in note.headings %}
+        <li class="toc-level-{{ heading.level }}"><a href="#{{ heading.id }}">{{ heading.title }}</a></li>
+        {% endfor %}
       </ul>
     </div>
   </aside>
