@@ -1130,10 +1130,57 @@ function wireMobileNav() {
   });
 }
 
+
+function wireTocScrollSpy() {
+  const tocPanel = document.querySelector('.toc-sticky-panel');
+  const tocLinks = document.querySelectorAll('.toc-list a');
+  if (!tocLinks.length) return;
+
+  const headings = [];
+  tocLinks.forEach((link) => {
+    const href = link.getAttribute('href');
+    if (!href || !href.startsWith('#')) return;
+    const id = href.slice(1);
+    const el = document.getElementById(id);
+    if (el) headings.push({ el, link });
+  });
+  if (!headings.length) return;
+
+  const offset = 120;
+
+  const update = () => {
+    let activeIndex = -1;
+    for (let i = headings.length - 1; i >= 0; i--) {
+      const rect = headings[i].el.getBoundingClientRect();
+      if (rect.top <= offset) {
+        activeIndex = i;
+        break;
+      }
+    }
+
+    headings.forEach((h, i) => {
+      h.link.classList.toggle('is-active', i === activeIndex);
+    });
+
+    if (activeIndex >= 0 && tocPanel) {
+      const activeLink = headings[activeIndex].link;
+      const panelRect = tocPanel.getBoundingClientRect();
+      const linkRect = activeLink.getBoundingClientRect();
+      if (linkRect.bottom > panelRect.bottom || linkRect.top < panelRect.top) {
+        activeLink.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
+  };
+
+  update();
+  window.addEventListener('scroll', update, { passive: true });
+}
+
 function init() {
   document.body.classList.add('js-ready');
   markCurrentNav();
   wireScrollState();
+  wireTocScrollSpy();
   wireRevealAnimations();
   wireCursorBeacon();
   wireMascot();
