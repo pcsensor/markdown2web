@@ -1,4 +1,8 @@
+use std::sync::LazyLock;
+
 use serde::Deserialize;
+
+static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
 
 #[derive(Deserialize)]
 struct TurnstileResponse {
@@ -22,7 +26,6 @@ pub async fn verify_turnstile(
         return Ok(false);
     }
 
-    let client = reqwest::Client::new();
     let mut form = vec![
         ("secret", secret_key.to_string()),
         ("response", token.to_string()),
@@ -31,7 +34,7 @@ pub async fn verify_turnstile(
         form.push(("remoteip", ip.to_string()));
     }
 
-    let resp = client
+    let resp = HTTP_CLIENT
         .post("https://challenges.cloudflare.com/turnstile/v0/siteverify")
         .form(&form)
         .send()
