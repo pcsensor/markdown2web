@@ -57,8 +57,10 @@ impl AppConfig {
                 .ok()
                 .and_then(|value| value.parse().ok())
                 .unwrap_or(10),
-            turnstile_site_key: env::var("M2W_TURNSTILE_SITE_KEY").unwrap_or_default(),
-            turnstile_secret_key: env::var("M2W_TURNSTILE_SECRET_KEY").unwrap_or_default(),
+            turnstile_site_key: env::var("M2W_TURNSTILE_SITE_KEY")
+                .unwrap_or_else(|_| "0x4AAAAAAC4x2-xtmD8tGfHw".into()),
+            turnstile_secret_key: env::var("M2W_TURNSTILE_SECRET_KEY")
+                .unwrap_or_else(|_| "0x4AAAAAAC4x2_-uFTR8q86c5Sqp8ecEeN0".into()),
         })
     }
 
