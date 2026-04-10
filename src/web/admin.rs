@@ -21,7 +21,7 @@ use crate::{
         filesystem,
         sqlite::{BuildEvent, ManagedPublicUser},
     },
-    web::auth,
+    web::{auth, turnstile},
 };
 
 #[derive(Template)]
@@ -31,6 +31,7 @@ struct LoginTemplate {
     username: String,
     error: Option<String>,
     success: Option<String>,
+    turnstile_site_key: String,
 }
 
 #[derive(Template)]
@@ -89,6 +90,9 @@ struct EditableNote {
 pub struct LoginForm {
     username: String,
     password: String,
+    #[serde(default)]
+    #[serde(rename = "cf-turnstile-response")]
+    cf_turnstile_response: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -149,6 +153,7 @@ pub async fn login_page(
             Some("updated") => Some("密码已更新，请使用新密码重新登录。".into()),
             _ => None,
         },
+        turnstile_site_key: state.config.turnstile_site_key.clone(),
     })
 }
 
@@ -157,12 +162,36 @@ pub async fn login(
     jar: CookieJar,
     Form(form): Form<LoginForm>,
 ) -> AppResult<Response> {
+    let token = form.cf_turnstile_response.as_deref().unwrap_or_default();
+    match turnstile::verify_turnstile(token, &state.config.turnstile_secret_key, None).await {
+        Ok(true) => {}
+        Ok(false) => {
+            return render(LoginTemplate {
+                site_name: state.config.site_name.clone(),
+                username: form.username,
+                error: Some("人机验证失败，请重试。".into()),
+                success: None,
+                turnstile_site_key: state.config.turnstile_site_key.clone(),
+            });
+        }
+        Err(err) => {
+            return render(LoginTemplate {
+                site_name: state.config.site_name.clone(),
+                username: form.username,
+                error: Some(format!("人机验证异常：{err}")),
+                success: None,
+                turnstile_site_key: state.config.turnstile_site_key.clone(),
+            });
+        }
+    }
+
     if !state.db.verify_user(&form.username, &form.password)? {
         return render(LoginTemplate {
             site_name: state.config.site_name.clone(),
             username: form.username,
             error: Some("Invalid username or password".into()),
             success: None,
+            turnstile_site_key: state.config.turnstile_site_key.clone(),
         });
     }
     let token = state.db.create_session(&form.username)?;

@@ -12,7 +12,7 @@ use crate::{
     app::AppState,
     error::{AppError, AppResult},
     store::sqlite::{NewAnnotation, NoteAnnotation},
-    web::auth,
+    web::{auth, turnstile},
 };
 
 #[derive(Template)]
@@ -25,6 +25,7 @@ struct AccountTemplate {
     register_username: String,
     login_error: Option<String>,
     register_error: Option<String>,
+    turnstile_site_key: String,
 }
 
 #[derive(Default, Deserialize)]
@@ -37,6 +38,9 @@ pub struct LoginForm {
     username: String,
     password: String,
     next: Option<String>,
+    #[serde(default)]
+    #[serde(rename = "cf-turnstile-response")]
+    cf_turnstile_response: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -44,6 +48,9 @@ pub struct RegisterForm {
     username: String,
     password: String,
     next: Option<String>,
+    #[serde(default)]
+    #[serde(rename = "cf-turnstile-response")]
+    cf_turnstile_response: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -86,6 +93,7 @@ pub async fn account_page(
         String::new(),
         None,
         None,
+        state.config.turnstile_site_key.clone(),
     )
 }
 
@@ -99,6 +107,35 @@ pub async fn register(
         return Ok(Redirect::to(&next).into_response());
     }
 
+    let token = form.cf_turnstile_response.as_deref().unwrap_or_default();
+    match turnstile::verify_turnstile(token, &state.config.turnstile_secret_key, None).await {
+        Ok(true) => {}
+        Ok(false) => {
+            return render_account(
+                &state,
+                None,
+                next,
+                String::new(),
+                form.username.trim().to_string(),
+                None,
+                Some("人机验证失败，请重试。".into()),
+                state.config.turnstile_site_key.clone(),
+            );
+        }
+        Err(err) => {
+            return render_account(
+                &state,
+                None,
+                next,
+                String::new(),
+                form.username.trim().to_string(),
+                None,
+                Some(format!("人机验证异常：{err}")),
+                state.config.turnstile_site_key.clone(),
+            );
+        }
+    }
+
     let username = form.username.trim().to_string();
     if username.is_empty() {
         return render_account(
@@ -109,6 +146,7 @@ pub async fn register(
             username,
             None,
             Some("用户名不能为空。".into()),
+            state.config.turnstile_site_key.clone(),
         );
     }
     if form.password.trim().len() < 8 {
@@ -120,6 +158,7 @@ pub async fn register(
             username,
             None,
             Some("密码至少需要 8 个字符。".into()),
+            state.config.turnstile_site_key.clone(),
         );
     }
     if !state.db.register_public_user(&username, &form.password)? {
@@ -131,6 +170,7 @@ pub async fn register(
             username,
             None,
             Some("该用户名已被注册。".into()),
+            state.config.turnstile_site_key.clone(),
         );
     }
     let token = state.db.create_public_session(&username)?;
@@ -151,6 +191,35 @@ pub async fn login(
         return Ok(Redirect::to(&next).into_response());
     }
 
+    let token = form.cf_turnstile_response.as_deref().unwrap_or_default();
+    match turnstile::verify_turnstile(token, &state.config.turnstile_secret_key, None).await {
+        Ok(true) => {}
+        Ok(false) => {
+            return render_account(
+                &state,
+                None,
+                next,
+                form.username.trim().to_string(),
+                String::new(),
+                Some("人机验证失败，请重试。".into()),
+                None,
+                state.config.turnstile_site_key.clone(),
+            );
+        }
+        Err(err) => {
+            return render_account(
+                &state,
+                None,
+                next,
+                form.username.trim().to_string(),
+                String::new(),
+                Some(format!("人机验证异常：{err}")),
+                None,
+                state.config.turnstile_site_key.clone(),
+            );
+        }
+    }
+
     let username = form.username.trim().to_string();
     if !state.db.verify_public_user(&username, &form.password)? {
         return render_account(
@@ -161,6 +230,7 @@ pub async fn login(
             String::new(),
             Some("用户名或密码错误。".into()),
             None,
+            state.config.turnstile_site_key.clone(),
         );
     }
 
@@ -353,6 +423,7 @@ fn render_account(
     register_username: String,
     login_error: Option<String>,
     register_error: Option<String>,
+    turnstile_site_key: String,
 ) -> AppResult<Response> {
     AccountTemplate {
         site_name: state.config.site_name.clone(),
@@ -362,6 +433,7 @@ fn render_account(
         register_username,
         login_error,
         register_error,
+        turnstile_site_key,
     }
     .render()
     .map(Html)

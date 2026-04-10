@@ -18,6 +18,8 @@ pub struct AppConfig {
     pub admin_password: String,
     pub watch_enabled: bool,
     pub upload_limit_mb: usize,
+    pub turnstile_site_key: String,
+    pub turnstile_secret_key: String,
 }
 
 impl AppConfig {
@@ -55,6 +57,8 @@ impl AppConfig {
                 .ok()
                 .and_then(|value| value.parse().ok())
                 .unwrap_or(10),
+            turnstile_site_key: env::var("M2W_TURNSTILE_SITE_KEY").unwrap_or_default(),
+            turnstile_secret_key: env::var("M2W_TURNSTILE_SECRET_KEY").unwrap_or_default(),
         })
     }
 

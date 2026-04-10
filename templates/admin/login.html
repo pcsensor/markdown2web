@@ -27,6 +27,9 @@
       {% endmatch %}
     <label>用户名<input type="text" name="username" value="{{ username }}" autocomplete="username" required /></label>
     <label>密码<input type="password" name="password" placeholder="" autocomplete="current-password" required /></label>
+    {% if !turnstile_site_key.is_empty() %}
+    <div class="cf-turnstile" data-sitekey="{{ turnstile_site_key }}" data-theme="light"></div>
+    {% endif %}
     <button type="submit">进入控制台</button>
   </form>
 </section>
