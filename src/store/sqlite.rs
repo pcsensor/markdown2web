@@ -1,12 +1,12 @@
 use std::{path::Path, sync::Mutex};
 
 use argon2::{
-    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
+    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
 };
 use chrono::Utc;
-use rand::{distributions::Alphanumeric, Rng};
-use rusqlite::{params, Connection, OptionalExtension};
+use rand::{Rng, distributions::Alphanumeric};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
 
 use crate::{

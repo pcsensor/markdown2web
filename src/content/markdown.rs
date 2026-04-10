@@ -1,11 +1,19 @@
 use std::collections::HashMap;
 
 use comrak::{
-    markdown_to_html_with_plugins, plugins::syntect::SyntectAdapterBuilder, Options, Plugins,
+    Options, Plugins, markdown_to_html_with_plugins, plugins::syntect::SyntectAdapterBuilder,
 };
 use regex::Regex;
 
 use crate::{content::Heading, error::AppResult};
+
+#[derive(Debug)]
+struct AudioEmbed {
+    token: String,
+    label: String,
+    src: String,
+    mime_type: &'static str,
+}
 
 pub fn slugify(input: &str) -> String {
     let mut slug = String::new();
@@ -57,6 +65,8 @@ pub fn extract_headings(markdown: &str) -> Vec<Heading> {
 }
 
 pub fn render_markdown(markdown: &str) -> AppResult<(String, Vec<Heading>)> {
+    let (markdown, audio_embeds) = replace_audio_blocks_with_tokens(markdown);
+
     let mut options = Options::default();
     options.extension.table = true;
     options.extension.autolink = true;
@@ -72,9 +82,70 @@ pub fn render_markdown(markdown: &str) -> AppResult<(String, Vec<Heading>)> {
     let mut plugins = Plugins::default();
     plugins.render.codefence_syntax_highlighter = Some(&adapter);
 
-    let html = markdown_to_html_with_plugins(markdown, &options, &plugins);
+    let html = markdown_to_html_with_plugins(&markdown, &options, &plugins);
+    let html = restore_audio_blocks(&html, &audio_embeds);
     let headings = extract_headings_from_html(&html);
     Ok((html, headings))
+}
+
+fn replace_audio_blocks_with_tokens(markdown: &str) -> (String, Vec<AudioEmbed>) {
+    let re = Regex::new(r"#\[([^\]]*)\]\(([^)]+\.(?:mp3|wav))\)").expect("valid audio regex");
+    let mut audio_embeds = Vec::new();
+    let markdown = re
+        .replace_all(markdown, |caps: &regex::Captures| {
+            let index = audio_embeds.len();
+            let token = format!("M2W_AUDIO_EMBED_{}", index);
+            let src = caps[2].to_string();
+            audio_embeds.push(AudioEmbed {
+                token: token.clone(),
+                label: caps[1].to_string(),
+                mime_type: if src.ends_with(".wav") {
+                    "audio/wav"
+                } else {
+                    "audio/mpeg"
+                },
+                src,
+            });
+            token
+        })
+        .to_string();
+    (markdown, audio_embeds)
+}
+
+fn restore_audio_blocks(html: &str, audio_embeds: &[AudioEmbed]) -> String {
+    let mut output = html.to_string();
+    for embed in audio_embeds {
+        let player = format!(
+            r#"<div class="audio-player" data-audio-player>
+                <div class="audio-player-inner">
+                    <button type="button" class="audio-play-btn" data-audio-play-btn aria-label="播放">
+                        <svg viewBox="0 0 20 20" fill="none" class="audio-icon-play" aria-hidden="true">
+                            <path d="M7 5.5v9l7-4.5-7-4.5Z" />
+                        </svg>
+                        <svg viewBox="0 0 20 20" fill="none" class="audio-icon-pause" aria-hidden="true">
+                            <rect x="6" y="5.5" width="2.6" height="9" rx="0.8" />
+                            <rect x="11.4" y="5.5" width="2.6" height="9" rx="0.8" />
+                        </svg>
+                    </button>
+                    <div class="audio-info">
+                        <span class="audio-label">{}</span>
+                        <span class="audio-time" data-audio-time>00:00/00:00</span>
+                    </div>
+                    <div class="audio-progress-wrap" data-audio-progress-wrap>
+                        <div class="audio-progress-bar" data-audio-progress-bar></div>
+                    </div>
+                    <audio preload="metadata" data-audio>
+                        <source src="{}" type="{}">
+                    </audio>
+                </div>
+            </div>"#,
+            embed.label, embed.src, embed.mime_type
+        );
+        output = output.replace(&format!("<p>{}</p>\n", embed.token), &player);
+        output = output.replace(&format!("<p>{}</p>", embed.token), &player);
+        output = output.replace(&embed.token, &player);
+    }
+    output
 }
 
 fn extract_headings_from_html(html: &str) -> Vec<Heading> {
@@ -139,6 +210,15 @@ fn main() {}
         )
         .unwrap();
         assert!(html.contains("language-rust"));
+    }
+
+    #[test]
+    fn renders_audio_embed_blocks_after_markdown_render() {
+        let (html, _) = render_markdown("#[红尘客栈](/assets/hckz.mp3)").unwrap();
+        assert!(html.contains("data-audio-player"));
+        assert!(html.contains("audio-label\">红尘客栈"));
+        assert!(html.contains("source src=\"/assets/hckz.mp3\" type=\"audio/mpeg\""));
+        assert!(!html.contains("M2W_AUDIO_EMBED_0"));
     }
 
     #[test]

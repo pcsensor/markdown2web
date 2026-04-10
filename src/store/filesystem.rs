@@ -6,9 +6,9 @@ use walkdir::WalkDir;
 use crate::{
     config::AppConfig,
     content::{
-        front_matter::{parse_front_matter, FrontMatter},
-        markdown::slugify,
         NoteSource,
+        front_matter::{FrontMatter, parse_front_matter},
+        markdown::slugify,
     },
     error::AppResult,
 };

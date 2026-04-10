@@ -15,7 +15,10 @@ pub fn now_rfc3339() -> String {
 /// 若解析失败则原样返回
 pub fn format_cst(rfc3339: &str) -> String {
     match DateTime::parse_from_rfc3339(rfc3339) {
-        Ok(dt) => dt.with_timezone(&cst()).format("%Y-%m-%d %H:%M").to_string(),
+        Ok(dt) => dt
+            .with_timezone(&cst())
+            .format("%Y-%m-%d %H:%M")
+            .to_string(),
         Err(_) => rfc3339.to_owned(),
     }
 }

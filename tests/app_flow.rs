@@ -10,6 +10,7 @@ use markdown2web::{
     config::AppConfig,
     store::{filesystem, sqlite::AppDatabase},
 };
+use regex::Regex;
 use serde_json::{Value, json};
 use tempfile::TempDir;
 use tower::util::ServiceExt;
@@ -34,6 +35,8 @@ fn test_config(temp: &TempDir) -> AppConfig {
         admin_password: "admin123456".into(),
         watch_enabled: false,
         upload_limit_mb: 10,
+        turnstile_site_key: String::new(),
+        turnstile_secret_key: String::new(),
     }
 }
 
@@ -184,6 +187,72 @@ async fn admin_auth_guard_and_save_note() {
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let html = String::from_utf8(body.to_vec()).unwrap();
     assert!(html.contains("Integration Note"));
+}
+
+#[tokio::test]
+async fn note_audio_embed_renders_and_asset_route_is_reachable() {
+    let (_temp, state, router) = setup().await;
+    fs::write(state.config.assets_dir.join("voice.mp3"), b"fake-mp3").unwrap();
+    filesystem::write_note(
+        &state.config,
+        "audio-note",
+        r#"---
+title: Audio Note
+slug: audio-note
+summary: audio embed regression test
+status: published
+---
+# Audio Note
+
+#[试听](/assets/voice.mp3)
+"#,
+    )
+    .unwrap();
+    state
+        .build_service
+        .rebuild("test audio embed")
+        .await
+        .unwrap();
+
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/notes/audio-note")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let html = String::from_utf8(body.to_vec()).unwrap();
+    assert!(html.contains("data-audio-player"));
+    assert!(html.contains("audio-icon-play"));
+    assert!(html.contains("audio-icon-pause"));
+    assert!(html.contains("00:00/00:00"));
+
+    let site = state.site.read().await.clone();
+    let asset = site
+        .assets
+        .iter()
+        .find(|asset| asset.public_url.ends_with("voice.mp3"))
+        .expect("audio asset should be materialized");
+    assert!(html.contains(&asset.public_url));
+
+    let source_re = Regex::new(r#"source src="([^"]+voice\.mp3)""#).unwrap();
+    let source = source_re
+        .captures(&html)
+        .and_then(|caps| caps.get(1))
+        .map(|capture| capture.as_str().to_string())
+        .expect("audio source should be rendered");
+    assert_eq!(source, asset.public_url);
+
+    let asset_response = router
+        .oneshot(Request::builder().uri(&source).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(asset_response.status(), StatusCode::OK);
 }
 
 #[tokio::test]
@@ -1145,6 +1214,16 @@ fn annotation_wiring_exists() {
     assert!(css.contains(".note-annotation"));
     assert!(css.contains(".annotation-comment-card"));
     assert!(css.contains(".annotation-rail"));
+    assert!(css.contains(".audio-icon-pause rect"));
+    assert!(css.contains(".audio-play-btn.is-playing .audio-icon-play"));
+    assert!(css.contains(".audio-play-btn.is-playing .audio-icon-pause"));
+    assert!(js.contains("const renderAnnotations = () => {"));
+    assert!(js.contains("renderMath();"));
+    assert!(js.contains("wireAudioPlayers();"));
+    assert!(js.contains("const setPlaybackUi = () => {"));
+    assert!(js.contains("const updateTimeDisplay = () => {"));
+    assert!(js.contains("playBtn.classList.toggle('is-playing', isPlaying);"));
+    assert!(js.contains("timeDisplay.textContent = `${current}/${total}`;"));
     assert!(css.contains(".annotation-visibility-select"));
     assert!(css.contains(".annotation-comment-visibility"));
     assert!(css.contains(".annotation-modal"));

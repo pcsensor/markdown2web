@@ -84,7 +84,9 @@ impl BuildService {
                             // Convert SystemTime -> DateTime<Utc>, then to CST (UTC+8)
                             let dt_utc: DateTime<Utc> = DateTime::<Utc>::from(mtime);
                             dt_utc
-                                .with_timezone(&FixedOffset::east_opt(8 * 3600).expect("UTC+8 is valid"))
+                                .with_timezone(
+                                    &FixedOffset::east_opt(8 * 3600).expect("UTC+8 is valid"),
+                                )
                                 .format("%Y-%m-%d %H:%M")
                                 .to_string()
                         }

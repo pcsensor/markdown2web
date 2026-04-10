@@ -8,9 +8,9 @@ use regex::Regex;
 use crate::{
     config::AppConfig,
     content::{
-        assets::{resolve_asset_reference, AssetCandidate},
-        markdown::slugify,
         BrokenLink, NoteSource,
+        assets::{AssetCandidate, resolve_asset_reference},
+        markdown::slugify,
     },
     error::AppResult,
 };
@@ -175,7 +175,7 @@ pub fn rewrite_markdown(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::content::{front_matter::FrontMatter, NoteSource};
+    use crate::content::{NoteSource, front_matter::FrontMatter};
 
     #[test]
     fn resolves_wiki_links_by_title() {
@@ -187,7 +187,7 @@ mod tests {
             title: "Source".into(),
             slug: "source".into(),
             summary: String::new(),
-            category: String::new(),
+            category: vec![],
             tags: vec![],
             status: "published".into(),
             aliases: vec![],
@@ -201,7 +201,7 @@ mod tests {
             title: "Target Note".into(),
             slug: "target-note".into(),
             summary: String::new(),
-            category: String::new(),
+            category: vec![],
             tags: vec![],
             status: "published".into(),
             aliases: vec![],

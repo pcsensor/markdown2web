@@ -1712,3 +1712,108 @@ button.secondary, .button.secondary {
     pointer-events: auto;
   }
 }
+
+/* Audio Player */
+.audio-player {
+  margin: 1.5rem 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.audio-player-inner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+}
+.audio-play-btn {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 200ms ease, transform 150ms ease;
+}
+.audio-play-btn:hover {
+  background: #1d4ed8;
+  transform: scale(1.05);
+}
+.audio-play-btn:active {
+  transform: scale(0.95);
+}
+.audio-play-btn svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+.audio-play-btn .audio-icon-pause {
+  display: none;
+}
+.audio-play-btn.is-playing .audio-icon-play {
+  display: none;
+}
+.audio-play-btn.is-playing .audio-icon-pause {
+  display: block;
+}
+.audio-play-btn svg * {
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+.audio-icon-play path {
+  fill: currentColor;
+  stroke: none;
+}
+.audio-icon-pause rect {
+  fill: currentColor;
+  stroke: none;
+}
+.audio-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.audio-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.audio-time {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+.audio-progress-wrap {
+  flex: 2;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+.audio-progress-bar {
+  height: 100%;
+  width: 0%;
+  border-radius: 3px;
+  background: var(--accent);
+  transition: width 100ms linear;
+}
+.audio-progress-wrap:hover .audio-progress-bar {
+  background: #1d4ed8;
+}

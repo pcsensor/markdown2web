@@ -736,7 +736,9 @@ const updateToolbarState = () => {
           });
       });
 
+    renderMath();
     wireCodeBlocks();
+    wireAudioPlayers();
     layoutComments();
     window.dispatchEvent(new CustomEvent('note-content-rendered'));
   };
@@ -1209,6 +1211,7 @@ function init() {
   wireCodeBlocks();
   wireMobileNav();
   wireAccountToggle();
+  wireAudioPlayers();
 }
 
 function wireAccountToggle() {
@@ -1235,6 +1238,100 @@ function wireAccountToggle() {
   showLogin.addEventListener('click', (e) => {
     e.preventDefault();
     switchTo('login');
+  });
+}
+
+function wireAudioPlayers() {
+  document.querySelectorAll('[data-audio-player]').forEach((container) => {
+    const audio = container.querySelector('[data-audio]');
+    const playBtn = container.querySelector('[data-audio-play-btn]');
+    if (!audio || !playBtn) return;
+
+    const progressBar = container.querySelector('[data-audio-progress-bar]');
+    const progressWrap = container.querySelector('[data-audio-progress-wrap]');
+    const timeDisplay = container.querySelector('[data-audio-time]');
+    const iconPlay = playBtn.querySelector('.audio-icon-play');
+    const iconPause = playBtn.querySelector('.audio-icon-pause');
+
+    const formatTime = (sec) => {
+      if (isNaN(sec) || !isFinite(sec)) return '00:00';
+      const m = Math.floor(sec / 60);
+      const s = Math.floor(sec % 60);
+      return `${String(m).padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    };
+
+    const setPlaybackUi = () => {
+      const isPlaying = !audio.paused && !audio.ended;
+      playBtn.classList.toggle('is-playing', isPlaying);
+      playBtn.setAttribute('aria-label', isPlaying ? '暂停' : '播放');
+    };
+
+    const updateTimeDisplay = () => {
+      const current = formatTime(audio.currentTime);
+      const total = formatTime(audio.duration);
+      if (timeDisplay) {
+        timeDisplay.textContent = `${current}/${total}`;
+      }
+    };
+
+    playBtn.addEventListener('click', () => {
+      if (audio.paused) {
+        if (audio.readyState === 0) {
+          audio.load();
+        }
+        audio.play()
+          .then(() => {
+            setPlaybackUi();
+          })
+          .catch(() => {
+            playBtn.disabled = true;
+            playBtn.setAttribute('aria-label', '音频无法播放');
+          });
+      } else {
+        audio.pause();
+        setPlaybackUi();
+      }
+    });
+
+    audio.addEventListener('play', () => {
+      setPlaybackUi();
+    });
+
+    audio.addEventListener('pause', () => {
+      setPlaybackUi();
+    });
+
+    audio.addEventListener('timeupdate', () => {
+      const pct = (audio.currentTime / audio.duration) * 100;
+      progressBar.style.width = `${pct}%`;
+      updateTimeDisplay();
+    });
+
+    audio.addEventListener('loadedmetadata', () => {
+      updateTimeDisplay();
+    });
+
+    audio.addEventListener('ended', () => {
+      setPlaybackUi();
+      progressBar.style.width = '0%';
+      updateTimeDisplay();
+    });
+
+    audio.addEventListener('error', () => {
+      playBtn.disabled = true;
+      playBtn.setAttribute('aria-label', '音频无法播放');
+      setPlaybackUi();
+    });
+
+    progressWrap.addEventListener('click', (e) => {
+      if (!audio.duration) return;
+      const rect = progressWrap.getBoundingClientRect();
+      const pct = (e.clientX - rect.left) / rect.width;
+      audio.currentTime = pct * audio.duration;
+    });
+
+    setPlaybackUi();
+    updateTimeDisplay();
   });
 }
 
