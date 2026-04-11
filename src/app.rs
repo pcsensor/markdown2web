@@ -75,6 +75,10 @@ pub fn build_router(state: AppState) -> Router {
             get(account::list_annotations).post(account::create_annotation),
         )
         .route(
+            "/api/notes/{slug}/danmaku",
+            get(account::list_danmaku).post(account::create_danmaku),
+        )
+        .route(
             "/api/annotations/{id}",
             put(account::update_annotation).delete(account::delete_annotation),
         )

@@ -526,8 +526,20 @@ status: published
     assert!(html.contains("data-video-player"));
     assert!(html.contains("video-player-frame"));
     assert!(html.contains("video-player-media"));
-    assert!(html.contains("controls preload=\"none\" playsinline"));
+    assert!(html.contains("class=\"video-player-media\" preload=\"none\" playsinline"));
     assert!(html.contains("data-video-load data-static-button"));
+    assert!(html.contains("data-video-controls"));
+    assert!(html.contains("data-video-toggle"));
+    assert!(html.contains("data-video-progress"));
+    assert!(html.contains("data-video-mute"));
+    assert!(html.contains("data-video-fullscreen"));
+    assert!(html.contains("data-video-danmaku-layer"));
+    assert!(html.contains("data-video-danmaku-form"));
+    assert!(html.contains("data-video-danmaku-input"));
+    assert!(html.contains("data-video-danmaku-login"));
+    assert!(html.contains("data-video-speed"));
+    assert!(html.contains("data-video-key"));
+    assert!(!html.contains(" controls "));
     assert!(html.contains("无法播放视频：演示视频"));
     assert!(!html.contains("video-label"));
 
@@ -1262,6 +1274,105 @@ async fn public_user_auth_and_annotation_api_flow() {
 }
 
 #[tokio::test]
+async fn danmaku_api_requires_login_and_persists_by_video_time() {
+    let (_temp, _state, router) = setup().await;
+    let video_src = "/assets/demo-video.mp4";
+
+    let unauthorized_list = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/notes/welcome/danmaku?video_src=%2Fassets%2Fdemo-video.mp4")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unauthorized_list.status(), StatusCode::UNAUTHORIZED);
+
+    let unauthorized_create = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/notes/welcome/danmaku")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "video_src": video_src,
+                        "time_ms": 1200,
+                        "body": "第一条弹幕"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unauthorized_create.status(), StatusCode::UNAUTHORIZED);
+
+    let register_request = Request::builder()
+        .method("POST")
+        .uri("/account/register")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body(Body::from(
+            "username=danmaku-user&password=ReaderPass123&next=/notes/welcome",
+        ))
+        .unwrap();
+    let register_response = router.clone().oneshot(register_request).await.unwrap();
+    assert_eq!(register_response.status(), StatusCode::SEE_OTHER);
+    let user_cookie = register_response
+        .headers()
+        .get(header::SET_COOKIE)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+
+    let create_request = Request::builder()
+        .method("POST")
+        .uri("/api/notes/welcome/danmaku")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::COOKIE, &user_cookie)
+        .body(Body::from(
+            json!({
+                "video_src": video_src,
+                "time_ms": 1200,
+                "body": "第一条弹幕"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let create_response = router.clone().oneshot(create_request).await.unwrap();
+    assert_eq!(create_response.status(), StatusCode::CREATED);
+    let body = to_bytes(create_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let created: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(created["username"], "danmaku-user");
+    assert_eq!(created["body"], "第一条弹幕");
+    assert_eq!(created["time_ms"], 1200);
+
+    let list_response = router
+        .oneshot(
+            Request::builder()
+                .uri("/api/notes/welcome/danmaku?video_src=%2Fassets%2Fdemo-video.mp4")
+                .header(header::COOKIE, &user_cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(list_response.status(), StatusCode::OK);
+    let body = to_bytes(list_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let listed: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(listed["danmaku"].as_array().unwrap().len(), 1);
+    assert_eq!(listed["danmaku"][0]["video_src"], video_src);
+}
+
+#[tokio::test]
 async fn rebuild_after_file_change_updates_site() {
     let (_temp, state, _router) = setup().await;
 
@@ -1566,6 +1677,16 @@ fn annotation_wiring_exists() {
     assert!(css.contains(".responsive-image"));
     assert!(css.contains(".video-load-button"));
     assert!(css.contains(".video-player.is-loaded .video-load-button"));
+    assert!(css.contains(".video-controls"));
+    assert!(css.contains(".video-control-button"));
+    assert!(css.contains(".video-progress-fill"));
+    assert!(css.contains(".video-time"));
+    assert!(css.contains(".video-danmaku-layer"));
+    assert!(css.contains(".video-danmaku-item"));
+    assert!(css.contains("@keyframes danmaku-fly"));
+    assert!(css.contains(".video-speed-select"));
+    assert!(css.contains(".video-danmaku-form"));
+    assert!(css.contains(".video-danmaku-login"));
     assert!(css.contains(".video-load-button:hover"));
     assert!(css.contains(".video-load-button:active"));
     assert!(css.contains(".video-load-button::before"));
@@ -1589,6 +1710,15 @@ fn annotation_wiring_exists() {
     assert!(js.contains("element.hasAttribute('data-static-button')"));
     assert!(js.contains("source.setAttribute('src'"));
     assert!(js.contains("video.load();"));
+    assert!(js.contains("const updateControls = () => {"));
+    assert!(js.contains("const updateTime = () => {"));
+    assert!(js.contains("data-video-toggle"));
+    assert!(js.contains("requestFullscreen"));
+    assert!(js.contains("/danmaku"));
+    assert!(js.contains("data-video-speed"));
+    assert!(js.contains("data-video-danmaku-form"));
+    assert!(js.contains("showDanmaku"));
+    assert!(js.contains("video.playbackRate"));
     assert!(js.contains("const setPlaybackUi = () => {"));
     assert!(js.contains("const updateTimeDisplay = () => {"));
     assert!(js.contains("playBtn.classList.toggle('is-playing', isPlaying);"));

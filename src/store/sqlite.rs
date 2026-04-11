@@ -37,6 +37,17 @@ pub struct NoteAnnotation {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct VideoDanmaku {
+    pub id: i64,
+    pub username: String,
+    pub note_slug: String,
+    pub video_src: String,
+    pub time_ms: i64,
+    pub body: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct ManagedPublicUser {
     pub username: String,
     pub route_key: String,
@@ -54,6 +65,14 @@ pub struct NewAnnotation<'a> {
     pub color: Option<&'a str>,
     pub comment: Option<&'a str>,
     pub visibility: &'a str,
+}
+
+pub struct NewVideoDanmaku<'a> {
+    pub username: &'a str,
+    pub note_slug: &'a str,
+    pub video_src: &'a str,
+    pub time_ms: i64,
+    pub body: &'a str,
 }
 
 pub struct AppDatabase {
@@ -112,6 +131,17 @@ impl AppDatabase {
                 updated_at TEXT NOT NULL,
                 UNIQUE(username, note_slug, start_offset, end_offset)
             );
+            CREATE TABLE IF NOT EXISTS video_danmaku (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                note_slug TEXT NOT NULL,
+                video_src TEXT NOT NULL,
+                time_ms INTEGER NOT NULL,
+                body TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_video_danmaku_lookup
+                ON video_danmaku(note_slug, video_src, time_ms, id);
             "#,
         )?;
         ensure_annotations_visibility_column(&conn)?;
@@ -371,6 +401,10 @@ impl AppDatabase {
                 "UPDATE annotations SET username = ?1 WHERE username = ?2",
                 params![next_username, current_username],
             )?;
+            tx.execute(
+                "UPDATE video_danmaku SET username = ?1 WHERE username = ?2",
+                params![next_username, current_username],
+            )?;
         }
         tx.commit()?;
         Ok(Some(next_username.to_string()))
@@ -385,6 +419,10 @@ impl AppDatabase {
         )?;
         tx.execute(
             "DELETE FROM annotations WHERE username = ?1",
+            params![username],
+        )?;
+        tx.execute(
+            "DELETE FROM video_danmaku WHERE username = ?1",
             params![username],
         )?;
         let deleted = tx.execute("DELETE FROM users WHERE username = ?1", params![username])?;
@@ -513,6 +551,46 @@ impl AppDatabase {
         Ok(deleted > 0)
     }
 
+    pub fn list_video_danmaku(
+        &self,
+        note_slug: &str,
+        video_src: &str,
+    ) -> AppResult<Vec<VideoDanmaku>> {
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        let mut stmt = conn.prepare(
+            r#"
+            SELECT id, username, note_slug, video_src, time_ms, body, created_at
+            FROM video_danmaku
+            WHERE note_slug = ?1 AND video_src = ?2
+            ORDER BY time_ms ASC, id ASC
+            "#,
+        )?;
+        let rows = stmt.query_map(params![note_slug, video_src], video_danmaku_from_row)?;
+        Ok(rows.filter_map(Result::ok).collect())
+    }
+
+    pub fn create_video_danmaku(&self, danmaku: NewVideoDanmaku<'_>) -> AppResult<VideoDanmaku> {
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        let now = Utc::now().to_rfc3339();
+        conn.execute(
+            r#"
+            INSERT INTO video_danmaku(username, note_slug, video_src, time_ms, body, created_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            "#,
+            params![
+                danmaku.username,
+                danmaku.note_slug,
+                danmaku.video_src,
+                danmaku.time_ms,
+                danmaku.body,
+                now,
+            ],
+        )?;
+        let id = conn.last_insert_rowid();
+        video_danmaku_by_id(&conn, id)?
+            .ok_or_else(|| AppError::internal("video danmaku insert failed"))
+    }
+
     pub fn log_build(&self, level: &str, message: &str) -> AppResult<()> {
         let conn = self.conn.lock().expect("db mutex poisoned");
         conn.execute(
@@ -594,6 +672,35 @@ fn annotation_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<NoteAnnotati
             .unwrap_or_default(),
         updated_at: row
             .get::<_, String>(10)
+            .map(|s| time::format_cst(&s))
+            .unwrap_or_default(),
+    })
+}
+
+fn video_danmaku_by_id(conn: &Connection, id: i64) -> AppResult<Option<VideoDanmaku>> {
+    conn.query_row(
+        r#"
+        SELECT id, username, note_slug, video_src, time_ms, body, created_at
+        FROM video_danmaku
+        WHERE id = ?1
+        "#,
+        params![id],
+        video_danmaku_from_row,
+    )
+    .optional()
+    .map_err(Into::into)
+}
+
+fn video_danmaku_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<VideoDanmaku> {
+    Ok(VideoDanmaku {
+        id: row.get(0)?,
+        username: row.get(1)?,
+        note_slug: row.get(2)?,
+        video_src: row.get(3)?,
+        time_ms: row.get(4)?,
+        body: row.get(5)?,
+        created_at: row
+            .get::<_, String>(6)
             .map(|s| time::format_cst(&s))
             .unwrap_or_default(),
     })

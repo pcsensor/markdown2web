@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     app::AppState,
     error::{AppError, AppResult},
-    store::sqlite::{NewAnnotation, NoteAnnotation},
+    store::sqlite::{NewAnnotation, NewVideoDanmaku, NoteAnnotation, VideoDanmaku},
     web::{auth, turnstile},
 };
 
@@ -78,6 +78,23 @@ pub struct UpdateAnnotationPayload {
 #[derive(Debug, Serialize)]
 pub struct AnnotationListResponse {
     annotations: Vec<NoteAnnotation>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DanmakuQuery {
+    video_src: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateDanmakuPayload {
+    video_src: String,
+    time_ms: i64,
+    body: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DanmakuListResponse {
+    danmaku: Vec<VideoDanmaku>,
 }
 
 pub async fn account_page(
@@ -363,6 +380,42 @@ pub async fn delete_annotation(
     Ok(StatusCode::NO_CONTENT)
 }
 
+pub async fn list_danmaku(
+    Path(slug): Path<String>,
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Query(query): Query<DanmakuQuery>,
+) -> AppResult<Json<DanmakuListResponse>> {
+    ensure_published_note(&state, &slug).await?;
+    auth::current_viewer(&jar, &state)?.ok_or(AppError::Unauthorized)?;
+    let video_src = normalize_video_src(query.video_src)?;
+    Ok(Json(DanmakuListResponse {
+        danmaku: state.db.list_video_danmaku(&slug, &video_src)?,
+    }))
+}
+
+pub async fn create_danmaku(
+    Path(slug): Path<String>,
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Json(payload): Json<CreateDanmakuPayload>,
+) -> AppResult<Response> {
+    ensure_published_note(&state, &slug).await?;
+    let (username, _is_admin) =
+        auth::current_viewer(&jar, &state)?.ok_or(AppError::Unauthorized)?;
+    let video_src = normalize_video_src(payload.video_src)?;
+    let body = normalize_danmaku_body(payload.body)?;
+    validate_danmaku_time(payload.time_ms)?;
+    let record = state.db.create_video_danmaku(NewVideoDanmaku {
+        username: &username,
+        note_slug: &slug,
+        video_src: &video_src,
+        time_ms: payload.time_ms,
+        body: &body,
+    })?;
+    Ok((StatusCode::CREATED, Json(record)).into_response())
+}
+
 async fn ensure_published_note(state: &AppState, slug: &str) -> AppResult<()> {
     let site = state.site.read().await;
     let exists = site.note(slug).filter(|note| note.is_published()).is_some();
@@ -424,6 +477,37 @@ fn normalize_visibility(value: Option<String>, has_comment: bool) -> AppResult<S
 fn validate_offsets(start_offset: usize, end_offset: usize) -> AppResult<()> {
     if end_offset <= start_offset {
         return Err(AppError::BadRequest("annotation range is invalid".into()));
+    }
+    Ok(())
+}
+
+fn normalize_video_src(value: String) -> AppResult<String> {
+    let value = value.trim();
+    if value.is_empty() || value.len() > 512 {
+        return Err(AppError::BadRequest("video source is invalid".into()));
+    }
+    if !value.starts_with("/assets/") {
+        return Err(AppError::BadRequest(
+            "video source must be a site asset".into(),
+        ));
+    }
+    Ok(value.into())
+}
+
+fn normalize_danmaku_body(value: String) -> AppResult<String> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Err(AppError::BadRequest("danmaku cannot be empty".into()));
+    }
+    if value.chars().count() > 80 {
+        return Err(AppError::BadRequest("danmaku is too long".into()));
+    }
+    Ok(value.into())
+}
+
+fn validate_danmaku_time(time_ms: i64) -> AppResult<()> {
+    if !(0..=24 * 60 * 60 * 1000).contains(&time_ms) {
+        return Err(AppError::BadRequest("danmaku time is invalid".into()));
     }
     Ok(())
 }

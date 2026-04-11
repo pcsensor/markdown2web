@@ -1459,9 +1459,102 @@ function wireVideoPlayers() {
     const video = container.querySelector('[data-video-src]');
     const source = video?.querySelector('source[data-src]');
     const loadButton = container.querySelector('[data-video-load]');
+    const toggleButton = container.querySelector('[data-video-toggle]');
+    const progress = container.querySelector('[data-video-progress]');
+    const progressFill = container.querySelector('[data-video-progress-fill]');
+    const timeDisplay = container.querySelector('[data-video-time]');
+    const muteButton = container.querySelector('[data-video-mute]');
+    const fullscreenButton = container.querySelector('[data-video-fullscreen]');
+    const speedSelect = container.querySelector('[data-video-speed]');
+    const danmakuLayer = container.querySelector('[data-video-danmaku-layer]');
+    const danmakuForm = container.querySelector('[data-video-danmaku-form]');
+    const danmakuInput = container.querySelector('[data-video-danmaku-input]');
+    const danmakuLogin = container.querySelector('[data-video-danmaku-login]');
+    const article = container.closest('[data-note-article]');
     if (!video || !source || video.dataset.videoWired === 'true') return;
 
     video.dataset.videoWired = 'true';
+    const noteSlug = article?.dataset.noteSlug || '';
+    const accountUrl = article?.dataset.accountUrl || '/account';
+    const danmakuEnabled = article?.dataset.annotationEnabled === 'true';
+    const videoKey = video.dataset.videoKey || video.dataset.videoSrc || '';
+    const danmakuState = {
+      items: [],
+      shown: new Set(),
+      lastTime: 0,
+      loaded: false,
+    };
+
+    const formatTime = (sec) => {
+      if (isNaN(sec) || !isFinite(sec)) return '00:00';
+      const m = Math.floor(sec / 60);
+      const s = Math.floor(sec % 60);
+      return `${String(m).padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    };
+
+    const updateTime = () => {
+      if (timeDisplay) {
+        timeDisplay.textContent = `${formatTime(video.currentTime)}/${formatTime(video.duration)}`;
+      }
+      if (progressFill) {
+        const pct = video.duration ? (video.currentTime / video.duration) * 100 : 0;
+        progressFill.style.width = `${Math.min(100, Math.max(0, pct))}%`;
+      }
+    };
+
+    const updateControls = () => {
+      const playing = !video.paused && !video.ended;
+      container.classList.toggle('is-playing', playing);
+      if (toggleButton) {
+        toggleButton.textContent = playing ? 'Ⅱ' : '▶';
+        toggleButton.setAttribute('aria-label', playing ? '暂停' : '播放');
+      }
+      if (muteButton) {
+        muteButton.textContent = video.muted || video.volume === 0 ? '静音' : '音量';
+        muteButton.setAttribute('aria-label', video.muted ? '取消静音' : '静音');
+      }
+      updateTime();
+    };
+
+    const showDanmaku = (item) => {
+      if (!danmakuLayer || !item?.body) return;
+      const node = document.createElement('span');
+      node.className = 'video-danmaku-item';
+      node.textContent = item.body;
+      const lane = Math.abs(Number(item.id || item.time_ms || 0)) % 7;
+      node.style.setProperty('--danmaku-top', `${8 + lane * 12}%`);
+      danmakuLayer.appendChild(node);
+      node.addEventListener('animationend', () => node.remove(), { once: true });
+    };
+
+    const syncDanmaku = () => {
+      if (!danmakuEnabled || !danmakuState.loaded) return;
+      const currentMs = Math.floor(video.currentTime * 1000);
+      if (currentMs + 500 < danmakuState.lastTime) {
+        danmakuState.shown.clear();
+      }
+      danmakuState.lastTime = currentMs;
+      danmakuState.items.forEach((item) => {
+        if (danmakuState.shown.has(item.id)) return;
+        if (item.time_ms <= currentMs + 250) {
+          danmakuState.shown.add(item.id);
+          showDanmaku(item);
+        }
+      });
+    };
+
+    const loadDanmaku = async () => {
+      if (!danmakuEnabled || danmakuState.loaded || !noteSlug || !videoKey) return;
+      const params = new URLSearchParams({ video_src: videoKey });
+      const response = await fetch(`/api/notes/${encodeURIComponent(noteSlug)}/danmaku?${params}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      danmakuState.items = data.danmaku || [];
+      danmakuState.loaded = true;
+      syncDanmaku();
+    };
 
     const loadVideo = async (autoplay = false) => {
       if (!source.getAttribute('src')) {
@@ -1472,6 +1565,8 @@ function wireVideoPlayers() {
       if (!autoplay) return;
       try {
         await video.play();
+        await loadDanmaku();
+        updateControls();
       } catch (error) {
         console.warn('Video playback failed', error);
       }
@@ -1481,9 +1576,113 @@ function wireVideoPlayers() {
       loadVideo(true);
     });
 
+    toggleButton?.addEventListener('click', async () => {
+      await loadVideo(false);
+      if (video.paused || video.ended) {
+        try {
+          await video.play();
+        } catch (error) {
+          console.warn('Video playback failed', error);
+        }
+      } else {
+        video.pause();
+      }
+      updateControls();
+    });
+
+    video.addEventListener('click', async () => {
+      await loadVideo(false);
+      if (video.paused || video.ended) {
+        await video.play().catch((error) => console.warn('Video playback failed', error));
+      } else {
+        video.pause();
+      }
+      updateControls();
+    });
+
     video.addEventListener('play', () => {
       container.classList.add('is-loaded');
+      loadDanmaku();
+      updateControls();
     });
+
+    video.addEventListener('pause', updateControls);
+    video.addEventListener('ended', updateControls);
+    video.addEventListener('loadedmetadata', updateControls);
+    video.addEventListener('timeupdate', () => {
+      updateTime();
+      syncDanmaku();
+    });
+    video.addEventListener('volumechange', updateControls);
+
+    progress?.addEventListener('click', async (event) => {
+      await loadVideo(false);
+      if (!video.duration) return;
+      const rect = progress.getBoundingClientRect();
+      const pct = (event.clientX - rect.left) / rect.width;
+      video.currentTime = Math.min(video.duration, Math.max(0, pct * video.duration));
+      updateTime();
+    });
+
+    muteButton?.addEventListener('click', () => {
+      video.muted = !video.muted;
+      updateControls();
+    });
+
+    speedSelect?.addEventListener('change', () => {
+      const rate = Number(speedSelect.value);
+      video.playbackRate = Number.isFinite(rate) && rate > 0 ? rate : 1;
+    });
+
+    fullscreenButton?.addEventListener('click', async () => {
+      const target = container.querySelector('.video-player-frame') || container;
+      if (document.fullscreenElement) {
+        await document.exitFullscreen().catch(() => {});
+        return;
+      }
+      await target.requestFullscreen?.().catch(() => {});
+    });
+
+    if (danmakuEnabled) {
+      danmakuForm?.classList.add('is-enabled');
+      if (danmakuInput) danmakuInput.placeholder = '发送弹幕';
+      if (danmakuLogin) danmakuLogin.hidden = true;
+    } else {
+      if (danmakuForm) danmakuForm.hidden = true;
+      if (danmakuLogin) danmakuLogin.href = accountUrl;
+    }
+
+    danmakuForm?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!danmakuEnabled || !danmakuInput || !noteSlug || !videoKey) return;
+      const body = danmakuInput.value.trim();
+      if (!body) return;
+      const payload = {
+        video_src: videoKey,
+        time_ms: Math.max(0, Math.floor(video.currentTime * 1000)),
+        body,
+      };
+      const response = await fetch(`/api/notes/${encodeURIComponent(noteSlug)}/danmaku`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+      if (response.status === 401) {
+        window.location.href = accountUrl;
+        return;
+      }
+      if (!response.ok) return;
+      const created = await response.json();
+      danmakuInput.value = '';
+      danmakuState.items.push(created);
+      danmakuState.shown.add(created.id);
+      showDanmaku(created);
+    });
+
+    updateControls();
   });
 }
 

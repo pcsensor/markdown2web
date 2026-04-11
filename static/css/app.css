@@ -1898,6 +1898,146 @@ button.secondary, .button.secondary {
   aspect-ratio: 16 / 9;
   object-fit: contain;
 }
+.video-danmaku-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
+}
+.video-danmaku-item {
+  position: absolute;
+  left: 100%;
+  top: var(--danmaku-top, 12%);
+  max-width: 80%;
+  white-space: nowrap;
+  color: #fff;
+  font-weight: 800;
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.9),
+    0 0 8px rgba(0, 0, 0, 0.55);
+  animation: danmaku-fly 7.5s linear forwards;
+}
+@keyframes danmaku-fly {
+  from { transform: translateX(0); }
+  to { transform: translateX(calc(-100vw - 100%)); }
+}
+.video-controls {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: auto minmax(80px, 1fr) auto auto auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.74);
+  color: #fff;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 180ms ease-out, transform 180ms ease-out;
+}
+.video-player.is-loaded .video-controls,
+.video-player-frame:hover .video-controls,
+.video-player:focus-within .video-controls {
+  opacity: 1;
+  transform: translateY(0);
+}
+.video-control-button {
+  min-width: 42px;
+  min-height: 36px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: none;
+  color: #fff;
+}
+.video-control-button::before {
+  content: none;
+}
+.video-control-button:hover,
+.video-control-button:focus-visible,
+.video-control-button:active {
+  transform: none;
+  background: rgba(255, 255, 255, 0.2);
+}
+.video-progress {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.24);
+  cursor: pointer;
+  overflow: hidden;
+}
+.video-progress-fill {
+  width: 0%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+.video-time {
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.video-speed-select {
+  min-width: 72px;
+  width: auto;
+  padding: 8px 10px;
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  box-shadow: none;
+}
+.video-speed-select option {
+  color: #111827;
+}
+.video-danmaku-form {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 76px;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 180ms ease-out, transform 180ms ease-out;
+}
+.video-player.is-loaded .video-danmaku-form.is-enabled,
+.video-player-frame:hover .video-danmaku-form.is-enabled,
+.video-player:focus-within .video-danmaku-form.is-enabled {
+  opacity: 1;
+  transform: translateY(0);
+}
+.video-danmaku-form input {
+  min-width: 0;
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(15, 23, 42, 0.68);
+  color: #fff;
+}
+.video-danmaku-form input::placeholder {
+  color: rgba(255, 255, 255, 0.68);
+}
+.video-danmaku-form button {
+  padding: 10px 14px;
+  border-radius: 12px;
+}
+.video-danmaku-login {
+  position: absolute;
+  right: 18px;
+  bottom: 82px;
+  z-index: 3;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.72);
+  color: #fff;
+  font-size: 0.82rem;
+}
 .video-load-button {
   position: absolute;
   left: 50%;
@@ -1927,4 +2067,28 @@ button.secondary, .button.secondary {
 }
 .video-player.is-loaded .video-load-button {
   display: none;
+}
+
+@media (max-width: 640px) {
+  .video-controls {
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    grid-template-columns: auto minmax(60px, 1fr) auto;
+  }
+  .video-danmaku-form {
+    left: 8px;
+    right: 8px;
+    bottom: 68px;
+  }
+  .video-time {
+    grid-column: 1 / -1;
+  }
+  .video-speed-select {
+    display: none;
+  }
+  .video-control-button[data-video-mute],
+  .video-control-button[data-video-fullscreen] {
+    display: none;
+  }
 }

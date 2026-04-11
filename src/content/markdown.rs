@@ -197,14 +197,37 @@ fn restore_video_blocks(html: &str, video_embeds: &[VideoEmbed]) -> String {
         let player = format!(
             r#"<figure class="video-player" data-video-player>
                 <div class="video-player-frame">
-                    <video class="video-player-media" controls preload="none" playsinline data-video-src="{}" data-video-type="{}">
+                    <video class="video-player-media" preload="none" playsinline data-video-src="{}" data-video-type="{}" data-video-key="{}">
                         <source data-src="{}" type="{}">
                         无法播放视频：{}
                     </video>
+                    <div class="video-danmaku-layer" data-video-danmaku-layer aria-hidden="true"></div>
                     <button type="button" class="video-load-button" data-video-load data-static-button>播放视频</button>
+                    <div class="video-controls" data-video-controls>
+                        <button type="button" class="video-control-button video-play-toggle" data-video-toggle data-static-button aria-label="播放">▶</button>
+                        <div class="video-progress" data-video-progress>
+                            <div class="video-progress-fill" data-video-progress-fill></div>
+                        </div>
+                        <span class="video-time" data-video-time>00:00/00:00</span>
+                        <select class="video-speed-select" data-video-speed data-static-button aria-label="播放速度">
+                            <option value="0.5">0.5x</option>
+                            <option value="0.75">0.75x</option>
+                            <option value="1" selected>1x</option>
+                            <option value="1.25">1.25x</option>
+                            <option value="1.5">1.5x</option>
+                            <option value="2">2x</option>
+                        </select>
+                        <button type="button" class="video-control-button" data-video-mute data-static-button aria-label="静音">音量</button>
+                        <button type="button" class="video-control-button" data-video-fullscreen data-static-button aria-label="全屏">全屏</button>
+                    </div>
+                    <form class="video-danmaku-form" data-video-danmaku-form>
+                        <input type="text" data-video-danmaku-input maxlength="80" placeholder="登录后发送弹幕" />
+                        <button type="submit" data-static-button>发送</button>
+                    </form>
+                    <a class="video-danmaku-login" data-video-danmaku-login href="/account">登录后发送弹幕</a>
                 </div>
             </figure>"#,
-            embed.src, embed.mime_type, embed.src, embed.mime_type, embed.label
+            embed.src, embed.mime_type, embed.src, embed.src, embed.mime_type, embed.label
         );
         output = output.replace(&format!("<p>{}</p>\n", embed.token), &player);
         output = output.replace(&format!("<p>{}</p>", embed.token), &player);
@@ -291,10 +314,20 @@ fn main() {}
         let (html, _) = render_markdown("@[Clion开发STM32](/assets/Clion-STM32.mp4)").unwrap();
         assert!(html.contains("data-video-player"));
         assert!(html.contains("video-player-frame"));
-        assert!(html.contains("controls preload=\"none\" playsinline"));
+        assert!(html.contains("class=\"video-player-media\" preload=\"none\" playsinline"));
         assert!(html.contains("data-video-load"));
+        assert!(html.contains("data-video-controls"));
+        assert!(html.contains("data-video-danmaku-layer"));
+        assert!(html.contains("data-video-danmaku-form"));
+        assert!(html.contains("data-video-speed"));
+        assert!(html.contains("data-video-toggle"));
+        assert!(html.contains("data-video-progress"));
+        assert!(html.contains("data-video-mute"));
+        assert!(html.contains("data-video-fullscreen"));
+        assert!(!html.contains(" controls "));
         assert!(html.contains("无法播放视频：Clion开发STM32"));
         assert!(html.contains("data-video-src=\"/assets/Clion-STM32.mp4\""));
+        assert!(html.contains("data-video-key=\"/assets/Clion-STM32.mp4\""));
         assert!(html.contains("source data-src=\"/assets/Clion-STM32.mp4\" type=\"video/mp4\""));
         assert!(!html.contains("video-label"));
         assert!(!html.contains("M2W_VIDEO_EMBED_0"));
