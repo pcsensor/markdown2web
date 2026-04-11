@@ -897,10 +897,33 @@ select:focus-visible {
   grid-template-areas: "sidebar article rail";
   gap: 20px;
   align-items: start;
+  min-width: 0;
 }
-.note-article { grid-area: article; position: relative; overflow: visible; }
-.note-article-body { position: relative; z-index: 1; }
-.note-sidebar { grid-area: sidebar; display: flex; flex-direction: column; gap: 16px; align-self: stretch; }
+.note-article {
+  grid-area: article;
+  position: relative;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-y: visible;
+}
+.note-article.interactive-card:hover {
+  transform: none;
+}
+.note-article-body {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  max-width: 100%;
+}
+.note-sidebar {
+  grid-area: sidebar;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-self: stretch;
+  min-width: 0;
+}
 .toc-sticky-panel {
   position: sticky;
   top: 96px;
@@ -1161,9 +1184,10 @@ select:focus-visible {
 .toc-level-2 { padding-left: 12px; }
 .toc-level-3, .toc-level-4, .toc-level-5, .toc-level-6 { padding-left: 24px; }
 
-.prose { line-height: 1.8; }
+.prose { line-height: 1.8; min-width: 0; max-width: 100%; overflow-wrap: break-word; }
 .prose h1, .prose h2, .prose h3 { letter-spacing: -0.03em; }
 .prose img { max-width: 100%; border-radius: 16px; box-shadow: 0 18px 36px rgba(15, 23, 42, 0.12); }
+.prose :where(img, video, iframe, figure, table, pre) { max-width: 100%; }
 .katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.4rem 0; }
 .prose hr { border: none; height: 1px; background: linear-gradient(90deg, transparent, rgba(37,99,235,0.24), transparent); margin: 28px 0; }
 .prose blockquote {
@@ -1816,4 +1840,44 @@ button.secondary, .button.secondary {
 }
 .audio-progress-wrap:hover .audio-progress-bar {
   background: #1d4ed8;
+}
+
+/* Video Player */
+.video-player {
+  margin: 1.8rem 0;
+  display: block;
+  inline-size: 100%;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.06), rgba(37, 99, 235, 0.08)),
+    var(--surface);
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+  contain: inline-size layout paint;
+}
+.video-player-frame {
+  position: relative;
+  display: block;
+  inline-size: 100%;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  aspect-ratio: 16 / 9;
+  max-block-size: min(68vh, 720px);
+  background: #020617;
+  overflow: hidden;
+}
+.video-player-media {
+  position: absolute;
+  inset: 0;
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  max-inline-size: 100%;
+  max-block-size: 100%;
+  min-inline-size: 0;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
 }

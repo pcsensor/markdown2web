@@ -15,6 +15,14 @@ struct AudioEmbed {
     mime_type: &'static str,
 }
 
+#[derive(Debug)]
+struct VideoEmbed {
+    token: String,
+    label: String,
+    src: String,
+    mime_type: &'static str,
+}
+
 pub fn slugify(input: &str) -> String {
     let mut slug = String::new();
     let mut last_dash = false;
@@ -66,6 +74,7 @@ pub fn extract_headings(markdown: &str) -> Vec<Heading> {
 
 pub fn render_markdown(markdown: &str) -> AppResult<(String, Vec<Heading>)> {
     let (markdown, audio_embeds) = replace_audio_blocks_with_tokens(markdown);
+    let (markdown, video_embeds) = replace_video_blocks_with_tokens(&markdown);
 
     let mut options = Options::default();
     options.extension.table = true;
@@ -84,6 +93,7 @@ pub fn render_markdown(markdown: &str) -> AppResult<(String, Vec<Heading>)> {
 
     let html = markdown_to_html_with_plugins(&markdown, &options, &plugins);
     let html = restore_audio_blocks(&html, &audio_embeds);
+    let html = restore_video_blocks(&html, &video_embeds);
     let headings = extract_headings_from_html(&html);
     Ok((html, headings))
 }
@@ -110,6 +120,39 @@ fn replace_audio_blocks_with_tokens(markdown: &str) -> (String, Vec<AudioEmbed>)
         })
         .to_string();
     (markdown, audio_embeds)
+}
+
+fn replace_video_blocks_with_tokens(markdown: &str) -> (String, Vec<VideoEmbed>) {
+    let re = Regex::new(r"@\[([^\]]*)\]\(([^)]+\.(?:mp4|webm|ogv|ogg|mov|m4v))\)")
+        .expect("valid video regex");
+    let mut video_embeds = Vec::new();
+    let markdown = re
+        .replace_all(markdown, |caps: &regex::Captures| {
+            let index = video_embeds.len();
+            let token = format!("M2W_VIDEO_EMBED_{}", index);
+            let src = caps[2].to_string();
+            video_embeds.push(VideoEmbed {
+                token: token.clone(),
+                label: caps[1].to_string(),
+                mime_type: video_mime_type(&src),
+                src,
+            });
+            token
+        })
+        .to_string();
+    (markdown, video_embeds)
+}
+
+fn video_mime_type(src: &str) -> &'static str {
+    if src.ends_with(".webm") {
+        "video/webm"
+    } else if src.ends_with(".ogv") || src.ends_with(".ogg") {
+        "video/ogg"
+    } else if src.ends_with(".mov") {
+        "video/quicktime"
+    } else {
+        "video/mp4"
+    }
 }
 
 fn restore_audio_blocks(html: &str, audio_embeds: &[AudioEmbed]) -> String {
@@ -140,6 +183,27 @@ fn restore_audio_blocks(html: &str, audio_embeds: &[AudioEmbed]) -> String {
                 </div>
             </div>"#,
             embed.label, embed.src, embed.mime_type
+        );
+        output = output.replace(&format!("<p>{}</p>\n", embed.token), &player);
+        output = output.replace(&format!("<p>{}</p>", embed.token), &player);
+        output = output.replace(&embed.token, &player);
+    }
+    output
+}
+
+fn restore_video_blocks(html: &str, video_embeds: &[VideoEmbed]) -> String {
+    let mut output = html.to_string();
+    for embed in video_embeds {
+        let player = format!(
+            r#"<figure class="video-player" data-video-player>
+                <div class="video-player-frame">
+                    <video class="video-player-media" controls preload="metadata" playsinline>
+                        <source src="{}" type="{}">
+                        无法播放视频：{}
+                    </video>
+                </div>
+            </figure>"#,
+            embed.src, embed.mime_type, embed.label
         );
         output = output.replace(&format!("<p>{}</p>\n", embed.token), &player);
         output = output.replace(&format!("<p>{}</p>", embed.token), &player);
@@ -219,6 +283,18 @@ fn main() {}
         assert!(html.contains("audio-label\">红尘客栈"));
         assert!(html.contains("source src=\"/assets/hckz.mp3\" type=\"audio/mpeg\""));
         assert!(!html.contains("M2W_AUDIO_EMBED_0"));
+    }
+
+    #[test]
+    fn renders_video_embed_blocks_after_markdown_render() {
+        let (html, _) = render_markdown("@[Clion开发STM32](/assets/Clion-STM32.mp4)").unwrap();
+        assert!(html.contains("data-video-player"));
+        assert!(html.contains("video-player-frame"));
+        assert!(html.contains("controls preload=\"metadata\" playsinline"));
+        assert!(html.contains("无法播放视频：Clion开发STM32"));
+        assert!(html.contains("source src=\"/assets/Clion-STM32.mp4\" type=\"video/mp4\""));
+        assert!(!html.contains("video-label"));
+        assert!(!html.contains("M2W_VIDEO_EMBED_0"));
     }
 
     #[test]

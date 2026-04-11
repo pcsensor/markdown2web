@@ -256,6 +256,74 @@ status: published
 }
 
 #[tokio::test]
+async fn note_video_embed_renders_and_asset_route_is_reachable() {
+    let (_temp, state, router) = setup().await;
+    fs::write(state.config.assets_dir.join("demo-video.mp4"), b"fake-mp4").unwrap();
+    filesystem::write_note(
+        &state.config,
+        "video-note",
+        r#"---
+title: Video Note
+slug: video-note
+summary: video embed regression test
+status: published
+---
+# Video Note
+
+@[演示视频](/assets/demo-video.mp4)
+"#,
+    )
+    .unwrap();
+    state
+        .build_service
+        .rebuild("test video embed")
+        .await
+        .unwrap();
+
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/notes/video-note")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let html = String::from_utf8(body.to_vec()).unwrap();
+    assert!(html.contains("data-video-player"));
+    assert!(html.contains("video-player-frame"));
+    assert!(html.contains("video-player-media"));
+    assert!(html.contains("controls preload=\"metadata\" playsinline"));
+    assert!(html.contains("无法播放视频：演示视频"));
+    assert!(!html.contains("video-label"));
+
+    let site = state.site.read().await.clone();
+    let asset = site
+        .assets
+        .iter()
+        .find(|asset| asset.public_url.ends_with("demo-video.mp4"))
+        .expect("video asset should be materialized");
+    assert!(html.contains(&asset.public_url));
+
+    let source_re = Regex::new(r#"source src="([^"]+demo-video\.mp4)""#).unwrap();
+    let source = source_re
+        .captures(&html)
+        .and_then(|caps| caps.get(1))
+        .map(|capture| capture.as_str().to_string())
+        .expect("video source should be rendered");
+    assert_eq!(source, asset.public_url);
+
+    let asset_response = router
+        .oneshot(Request::builder().uri(&source).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(asset_response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
 async fn admin_can_change_password_and_old_password_stops_working() {
     let (_temp, _state, router) = setup().await;
 
@@ -1106,9 +1174,14 @@ fn note_layout_places_sidebar_left_article_center_and_rail_right() {
     assert!(css.contains(".note-layout {\n  display: grid;"));
     assert!(css.contains("grid-template-columns: 260px minmax(0, 1fr) 300px;"));
     assert!(css.contains("grid-template-areas: \"sidebar article rail\";"));
-    assert!(css.contains(".note-article { grid-area: article;"));
-    assert!(css.contains(".note-sidebar { grid-area: sidebar;"));
+    assert!(css.contains(".note-article {\n  grid-area: article;"));
+    assert!(css.contains(".note-sidebar {\n  grid-area: sidebar;"));
     assert!(css.contains(".annotation-rail { grid-area: rail;"));
+    assert!(css.contains(".note-layout {\n  display: grid;"));
+    assert!(css.contains("min-width: 0;"));
+    assert!(css.contains("overflow-x: hidden;"));
+    assert!(css.contains(".note-article.interactive-card:hover"));
+    assert!(css.contains("transform: none;"));
     assert!(
         css.contains("grid-template-areas:\n      \"article\"\n      \"sidebar\"\n      \"rail\";")
     );
@@ -1217,6 +1290,20 @@ fn annotation_wiring_exists() {
     assert!(css.contains(".audio-icon-pause rect"));
     assert!(css.contains(".audio-play-btn.is-playing .audio-icon-play"));
     assert!(css.contains(".audio-play-btn.is-playing .audio-icon-pause"));
+    assert!(css.contains(".video-player"));
+    assert!(css.contains(".video-player-media"));
+    assert!(css.contains(".note-article {"));
+    assert!(css.contains("overflow-x: hidden;"));
+    assert!(css.contains(".note-article.interactive-card:hover"));
+    assert!(css.contains(".prose :where(img, video, iframe, figure, table, pre)"));
+    assert!(css.contains(".video-player-frame"));
+    assert!(css.contains("contain: inline-size layout paint;"));
+    assert!(css.contains("position: absolute;"));
+    assert!(css.contains("inset: 0;"));
+    assert!(css.contains("max-inline-size: 100%;"));
+    assert!(css.contains("min-inline-size: 0;"));
+    assert!(css.contains("object-fit: contain;"));
+    assert!(!css.contains(".video-label"));
     assert!(js.contains("const renderAnnotations = () => {"));
     assert!(js.contains("renderMath();"));
     assert!(js.contains("wireAudioPlayers();"));
