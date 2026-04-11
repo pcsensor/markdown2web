@@ -73,7 +73,7 @@ data/app.db             # SQLite 数据库
 - `M2W_ADMIN_USERNAME`
 - `M2W_ADMIN_PASSWORD`
 - `M2W_WATCH_ENABLED`
-- `M2W_UPLOAD_LIMIT_MB`
+- `M2W_UPLOAD_LIMIT_MB`（默认 `128`，用于 Markdown/资源上传；上传视频时按实际文件大小调高）
 
 ## 验证
 

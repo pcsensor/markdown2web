@@ -554,14 +554,18 @@ pub async fn upload_markdown(
     let Some(_user) = auth::current_user(&jar, &state)? else {
         return Ok(Redirect::to("/admin/login").into_response());
     };
-    while let Some(field) = multipart.next_field().await.map_err(AppError::internal)? {
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(multipart_upload_error)?
+    {
         let filename = field.file_name().unwrap_or("upload.md").to_string();
         if !filename.ends_with(".md") && !filename.ends_with(".markdown") {
             return Err(AppError::BadRequest(
                 "only markdown uploads are allowed".into(),
             ));
         }
-        let bytes = field.bytes().await.map_err(AppError::internal)?;
+        let bytes = field.bytes().await.map_err(multipart_upload_error)?;
         if bytes.len() > state.config.upload_limit_mb * 1024 * 1024 {
             return Err(AppError::BadRequest("upload too large".into()));
         }
@@ -588,15 +592,19 @@ pub async fn upload_asset(
     let Some(_user) = auth::current_user(&jar, &state)? else {
         return Ok(Redirect::to("/admin/login").into_response());
     };
-    while let Some(field) = multipart.next_field().await.map_err(AppError::internal)? {
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(multipart_upload_error)?
+    {
         let filename = field.file_name().unwrap_or("upload.bin").to_string();
         if !allowed_asset_filename(&filename) {
             return Err(AppError::BadRequest(
-                "unsupported asset type; allowlisted examples: png, jpg, webp, svg, pdf, zip, txt"
+                "unsupported asset type; allowlisted examples: png, jpg, webp, svg, mp3, mp4, pdf, zip, txt"
                     .into(),
             ));
         }
-        let bytes = field.bytes().await.map_err(AppError::internal)?;
+        let bytes = field.bytes().await.map_err(multipart_upload_error)?;
         if bytes.len() > state.config.upload_limit_mb * 1024 * 1024 {
             return Err(AppError::BadRequest("upload too large".into()));
         }
@@ -631,8 +639,14 @@ fn allowed_asset_filename(filename: &str) -> bool {
         .unwrap_or_default();
     matches!(
         ext.as_str(),
-        "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "pdf" | "txt" | "zip"
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "mp3" | "mp4" | "pdf" | "txt" | "zip"
     )
+}
+
+fn multipart_upload_error(error: impl std::fmt::Display) -> AppError {
+    AppError::BadRequest(format!(
+        "invalid multipart upload or upload too large; check M2W_UPLOAD_LIMIT_MB: {error}"
+    ))
 }
 
 async fn dashboard_response(

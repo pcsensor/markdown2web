@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use axum::{
     Router,
+    extract::DefaultBodyLimit,
     routing::{get, post, put},
 };
 use tokio::sync::{Mutex, RwLock};
@@ -51,6 +52,11 @@ impl AppState {
 pub fn build_router(state: AppState) -> Router {
     let static_service = ServeDir::new("static");
     let assets_service = ServeDir::new(state.config.generated_assets_dir.clone());
+    let upload_limit_bytes = state
+        .config
+        .upload_limit_mb
+        .saturating_add(1)
+        .saturating_mul(1024 * 1024);
 
     Router::new()
         .route("/", get(public::home))
@@ -92,8 +98,14 @@ pub fn build_router(state: AppState) -> Router {
         .route("/admin/notes/new", get(admin::new_note_page))
         .route("/admin/notes/{slug}/edit", get(admin::edit_note_page))
         .route("/admin/notes/save", post(admin::save_note))
-        .route("/admin/upload/markdown", post(admin::upload_markdown))
-        .route("/admin/upload/asset", post(admin::upload_asset))
+        .route(
+            "/admin/upload/markdown",
+            post(admin::upload_markdown).layer(DefaultBodyLimit::max(upload_limit_bytes)),
+        )
+        .route(
+            "/admin/upload/asset",
+            post(admin::upload_asset).layer(DefaultBodyLimit::max(upload_limit_bytes)),
+        )
         .route("/admin/rebuild", post(admin::rebuild_site))
         .nest_service("/static", static_service)
         .nest_service("/assets", assets_service)

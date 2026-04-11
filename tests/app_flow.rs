@@ -41,8 +41,13 @@ fn test_config(temp: &TempDir) -> AppConfig {
 }
 
 async fn setup() -> (TempDir, app::AppState, axum::Router) {
+    setup_with_upload_limit(10).await
+}
+
+async fn setup_with_upload_limit(upload_limit_mb: usize) -> (TempDir, app::AppState, axum::Router) {
     let temp = TempDir::new().unwrap();
-    let config = test_config(&temp);
+    let mut config = test_config(&temp);
+    config.upload_limit_mb = upload_limit_mb;
     config.ensure_directories().unwrap();
     let db = Arc::new(AppDatabase::open(&config.database_path()).unwrap());
     db.initialize(&config.admin_username, &config.admin_password)
@@ -187,6 +192,231 @@ async fn admin_auth_guard_and_save_note() {
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let html = String::from_utf8(body.to_vec()).unwrap();
     assert!(html.contains("Integration Note"));
+}
+
+#[tokio::test]
+async fn admin_can_upload_mp4_asset() {
+    let (_temp, state, router) = setup().await;
+
+    let login_request = Request::builder()
+        .method("POST")
+        .uri("/admin/login")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body(Body::from("username=admin&password=admin123456"))
+        .unwrap();
+    let response = router.clone().oneshot(login_request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let cookie = response
+        .headers()
+        .get(header::SET_COOKIE)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+
+    let boundary = "M2WBOUNDARY";
+    let body = format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"demo-upload.mp4\"\r\nContent-Type: video/mp4\r\n\r\nfake-mp4\r\n--{boundary}--\r\n"
+    );
+    let upload_request = Request::builder()
+        .method("POST")
+        .uri("/admin/upload/asset")
+        .header(
+            header::CONTENT_TYPE,
+            format!("multipart/form-data; boundary={boundary}"),
+        )
+        .header(header::COOKIE, cookie)
+        .body(Body::from(body))
+        .unwrap();
+    let response = router.oneshot(upload_request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(response.headers().get(header::LOCATION).unwrap(), "/admin");
+
+    let uploaded = state.config.assets_dir.join("demo-upload.mp4");
+    assert_eq!(fs::read(uploaded).unwrap(), b"fake-mp4");
+}
+
+#[tokio::test]
+async fn admin_can_upload_mp3_asset() {
+    let (_temp, state, router) = setup().await;
+
+    let login_request = Request::builder()
+        .method("POST")
+        .uri("/admin/login")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body(Body::from("username=admin&password=admin123456"))
+        .unwrap();
+    let response = router.clone().oneshot(login_request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let cookie = response
+        .headers()
+        .get(header::SET_COOKIE)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+
+    let boundary = "M2WBOUNDARY";
+    let body = format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"demo-upload.mp3\"\r\nContent-Type: audio/mpeg\r\n\r\nfake-mp3\r\n--{boundary}--\r\n"
+    );
+    let upload_request = Request::builder()
+        .method("POST")
+        .uri("/admin/upload/asset")
+        .header(
+            header::CONTENT_TYPE,
+            format!("multipart/form-data; boundary={boundary}"),
+        )
+        .header(header::COOKIE, cookie)
+        .body(Body::from(body))
+        .unwrap();
+    let response = router.oneshot(upload_request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(response.headers().get(header::LOCATION).unwrap(), "/admin");
+
+    let uploaded = state.config.assets_dir.join("demo-upload.mp3");
+    assert_eq!(fs::read(uploaded).unwrap(), b"fake-mp3");
+}
+
+#[tokio::test]
+async fn admin_can_upload_mp3_larger_than_default_body_limit() {
+    let (_temp, state, router) = setup().await;
+
+    let login_request = Request::builder()
+        .method("POST")
+        .uri("/admin/login")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body(Body::from("username=admin&password=admin123456"))
+        .unwrap();
+    let response = router.clone().oneshot(login_request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let cookie = response
+        .headers()
+        .get(header::SET_COOKIE)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+
+    let boundary = "M2WLARGEMP3";
+    let mut body = Vec::new();
+    body.extend_from_slice(
+        format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"large-upload.mp3\"\r\nContent-Type: audio/mpeg\r\n\r\n"
+        )
+        .as_bytes(),
+    );
+    body.extend(std::iter::repeat_n(b'a', 3 * 1024 * 1024));
+    body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+
+    let upload_request = Request::builder()
+        .method("POST")
+        .uri("/admin/upload/asset")
+        .header(
+            header::CONTENT_TYPE,
+            format!("multipart/form-data; boundary={boundary}"),
+        )
+        .header(header::COOKIE, cookie)
+        .body(Body::from(body))
+        .unwrap();
+    let response = router.oneshot(upload_request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+
+    let uploaded = state.config.assets_dir.join("large-upload.mp3");
+    assert_eq!(fs::metadata(uploaded).unwrap().len(), 3 * 1024 * 1024);
+}
+
+#[tokio::test]
+async fn admin_can_upload_32mb_mp4_when_limit_allows() {
+    let (_temp, state, router) = setup_with_upload_limit(64).await;
+
+    let login_request = Request::builder()
+        .method("POST")
+        .uri("/admin/login")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body(Body::from("username=admin&password=admin123456"))
+        .unwrap();
+    let response = router.clone().oneshot(login_request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let cookie = response
+        .headers()
+        .get(header::SET_COOKIE)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+
+    let boundary = "M2W32MBMP4";
+    let mut body = Vec::new();
+    body.extend_from_slice(
+        format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"large-video.mp4\"\r\nContent-Type: video/mp4\r\n\r\n"
+        )
+        .as_bytes(),
+    );
+    body.extend(std::iter::repeat_n(b'v', 32 * 1024 * 1024));
+    body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+
+    let upload_request = Request::builder()
+        .method("POST")
+        .uri("/admin/upload/asset")
+        .header(
+            header::CONTENT_TYPE,
+            format!("multipart/form-data; boundary={boundary}"),
+        )
+        .header(header::COOKIE, cookie)
+        .body(Body::from(body))
+        .unwrap();
+    let response = router.oneshot(upload_request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+
+    let uploaded = state.config.assets_dir.join("large-video.mp4");
+    assert_eq!(fs::metadata(uploaded).unwrap().len(), 32 * 1024 * 1024);
+}
+
+#[tokio::test]
+async fn admin_upload_over_limit_does_not_return_internal_error() {
+    let (_temp, _state, router) = setup_with_upload_limit(1).await;
+
+    let login_request = Request::builder()
+        .method("POST")
+        .uri("/admin/login")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body(Body::from("username=admin&password=admin123456"))
+        .unwrap();
+    let response = router.clone().oneshot(login_request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let cookie = response
+        .headers()
+        .get(header::SET_COOKIE)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+
+    let boundary = "M2WOVERLIMIT";
+    let mut body = Vec::new();
+    body.extend_from_slice(
+        format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"too-large.mp3\"\r\nContent-Type: audio/mpeg\r\n\r\n"
+        )
+        .as_bytes(),
+    );
+    body.extend(std::iter::repeat_n(b'a', 3 * 1024 * 1024));
+    body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+
+    let upload_request = Request::builder()
+        .method("POST")
+        .uri("/admin/upload/asset")
+        .header(
+            header::CONTENT_TYPE,
+            format!("multipart/form-data; boundary={boundary}"),
+        )
+        .header(header::COOKIE, cookie)
+        .body(Body::from(body))
+        .unwrap();
+    let response = router.oneshot(upload_request).await.unwrap();
+    assert_ne!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
 }
 
 #[tokio::test]
@@ -1252,6 +1482,18 @@ fn admin_user_management_wiring_exists() {
     assert!(css.contains(".admin-users-grid"));
     assert!(css.contains(".admin-user-row"));
     assert!(css.contains(".admin-danger-button"));
+}
+
+#[test]
+fn admin_asset_upload_accepts_audio_and_video() {
+    let dashboard = fs::read_to_string("templates/admin/dashboard.html").unwrap();
+    let admin = fs::read_to_string("src/web/admin.rs").unwrap();
+
+    assert!(dashboard.contains(".mp3"));
+    assert!(dashboard.contains(".mp4"));
+    assert!(admin.contains("\"mp3\""));
+    assert!(admin.contains("\"mp4\""));
+    assert!(admin.contains("svg, mp3, mp4, pdf"));
 }
 
 #[test]

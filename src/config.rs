@@ -2,6 +2,8 @@ use std::{env, fs, path::PathBuf};
 
 use crate::error::AppResult;
 
+const DEFAULT_UPLOAD_LIMIT_MB: usize = 128;
+
 #[derive(Debug, Clone)]
 pub struct AppConfig {
     pub host: String,
@@ -56,7 +58,7 @@ impl AppConfig {
             upload_limit_mb: env::var("M2W_UPLOAD_LIMIT_MB")
                 .ok()
                 .and_then(|value| value.parse().ok())
-                .unwrap_or(10),
+                .unwrap_or(DEFAULT_UPLOAD_LIMIT_MB),
             turnstile_site_key: env::var("M2W_TURNSTILE_SITE_KEY")
                 .unwrap_or_else(|_| "0x4AAAAAAC4x2-xtmD8tGfHw".into()),
             turnstile_secret_key: env::var("M2W_TURNSTILE_SECRET_KEY")
