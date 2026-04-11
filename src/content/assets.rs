@@ -432,8 +432,7 @@ fn materialize_video_poster_with_format<const N: usize>(
 
 fn replace_video_html(html: &str, original_url: &str, video: &ProcessedVideo) -> String {
     let re = Regex::new(&format!(
-        r#"(?s)<video class="video-player-media" preload="none" playsinline data-video-src="{}" data-video-type="[^"]*" data-video-key="{}">(?P<body>\s*)<source data-src="{}" type="[^"]+">"#,
-        regex::escape(original_url),
+        r#"(?s)<video class="video-player-media" preload="none" playsinline data-video-src="{}" data-video-type="[^"]*" data-video-key="(?P<key>[^"]+)">(?P<body>\s*)<source data-src="{}" type="[^"]+">"#,
         regex::escape(original_url),
         regex::escape(original_url)
     ))
@@ -445,9 +444,10 @@ fn replace_video_html(html: &str, original_url: &str, video: &ProcessedVideo) ->
         .unwrap_or_default();
     re.replace_all(html, |caps: &regex::Captures| {
         let body = caps.name("body").map(|m| m.as_str()).unwrap_or("\n");
+        let key = caps.name("key").map(|m| m.as_str()).unwrap_or(original_url);
         format!(
             r#"<video class="video-player-media" preload="none" playsinline{} data-video-src="{}" data-video-type="{}" data-video-key="{}">{}<source data-src="{}" type="{}">"#,
-            poster, video.video_url, video.video_type, original_url, body, video.video_url, video.video_type
+            poster, video.video_url, video.video_type, key, body, video.video_url, video.video_type
         )
     })
     .to_string()
@@ -621,7 +621,7 @@ mod tests {
         let html = apply_media_optimizations(
             r#"<figure class="video-player" data-video-player>
                 <div class="video-player-frame">
-                    <video class="video-player-media" preload="none" playsinline data-video-src="/assets/original.mp4" data-video-type="video/mp4" data-video-key="/assets/original.mp4">
+                    <video class="video-player-media" preload="none" playsinline data-video-src="/assets/original.mp4" data-video-type="video/mp4" data-video-key="/assets/original.mp4#0">
                         <source data-src="/assets/original.mp4" type="video/mp4">
                         fallback
                     </video>
@@ -632,7 +632,7 @@ mod tests {
 
         assert!(html.contains(r#"poster="/assets/original-poster.jpg""#));
         assert!(html.contains(r#"data-video-src="/assets/original-720p.mp4""#));
-        assert!(html.contains(r#"data-video-key="/assets/original.mp4""#));
+        assert!(html.contains(r#"data-video-key="/assets/original.mp4#0""#));
         assert!(html.contains(r#"<source data-src="/assets/original-720p.mp4" type="video/mp4">"#));
         assert!(!html.contains(r#"data-video-src="/assets/original.mp4""#));
     }

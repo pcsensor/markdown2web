@@ -90,6 +90,7 @@ pub struct CreateDanmakuPayload {
     video_src: String,
     time_ms: i64,
     body: String,
+    color: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -405,6 +406,7 @@ pub async fn create_danmaku(
         auth::current_viewer(&jar, &state)?.ok_or(AppError::Unauthorized)?;
     let video_src = normalize_video_src(payload.video_src)?;
     let body = normalize_danmaku_body(payload.body)?;
+    let color = normalize_color(payload.color)?.unwrap_or_else(|| "#ffffff".into());
     validate_danmaku_time(payload.time_ms)?;
     let record = state.db.create_video_danmaku(NewVideoDanmaku {
         username: &username,
@@ -412,6 +414,7 @@ pub async fn create_danmaku(
         video_src: &video_src,
         time_ms: payload.time_ms,
         body: &body,
+        color: &color,
     })?;
     Ok((StatusCode::CREATED, Json(record)).into_response())
 }
@@ -486,7 +489,11 @@ fn normalize_video_src(value: String) -> AppResult<String> {
     if value.is_empty() || value.len() > 512 {
         return Err(AppError::BadRequest("video source is invalid".into()));
     }
-    if !value.starts_with("/assets/") {
+    let asset_part = value
+        .split_once('#')
+        .map(|(asset, _)| asset)
+        .unwrap_or(value);
+    if !asset_part.starts_with("/assets/") {
         return Err(AppError::BadRequest(
             "video source must be a site asset".into(),
         ));

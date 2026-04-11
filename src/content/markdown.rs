@@ -20,6 +20,7 @@ struct VideoEmbed {
     token: String,
     label: String,
     src: String,
+    danmaku_key: String,
     mime_type: &'static str,
 }
 
@@ -134,6 +135,7 @@ fn replace_video_blocks_with_tokens(markdown: &str) -> (String, Vec<VideoEmbed>)
             video_embeds.push(VideoEmbed {
                 token: token.clone(),
                 label: caps[1].to_string(),
+                danmaku_key: format!("{src}#{index}"),
                 mime_type: video_mime_type(&src),
                 src,
             });
@@ -195,7 +197,7 @@ fn restore_video_blocks(html: &str, video_embeds: &[VideoEmbed]) -> String {
     let mut output = html.to_string();
     for embed in video_embeds {
         let player = format!(
-            r#"<figure class="video-player" data-video-player>
+            r##"<figure class="video-player" data-video-player>
                 <div class="video-player-frame">
                     <video class="video-player-media" preload="none" playsinline data-video-src="{}" data-video-type="{}" data-video-key="{}">
                         <source data-src="{}" type="{}">
@@ -217,17 +219,28 @@ fn restore_video_blocks(html: &str, video_embeds: &[VideoEmbed]) -> String {
                             <option value="1.5">1.5x</option>
                             <option value="2">2x</option>
                         </select>
-                        <button type="button" class="video-control-button" data-video-mute data-static-button aria-label="静音">音量</button>
-                        <button type="button" class="video-control-button" data-video-fullscreen data-static-button aria-label="全屏">全屏</button>
+                        <label class="video-volume-control" aria-label="音量">
+                            <span data-video-volume-label>100%</span>
+                            <input type="range" min="0" max="1" step="0.05" value="1" data-video-volume data-static-button />
+                        </label>
+                        <button type="button" class="video-control-button video-fullscreen-button" data-video-fullscreen data-static-button aria-label="全屏">
+                            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                <path d="M4 9V4h5" />
+                                <path d="M15 4h5v5" />
+                                <path d="M20 15v5h-5" />
+                                <path d="M9 20H4v-5" />
+                            </svg>
+                        </button>
                     </div>
                     <form class="video-danmaku-form" data-video-danmaku-form>
+                        <input type="color" class="video-danmaku-color" data-video-danmaku-color value="#ffffff" aria-label="弹幕颜色" />
                         <input type="text" data-video-danmaku-input maxlength="80" placeholder="登录后发送弹幕" />
                         <button type="submit" data-static-button>发送</button>
                     </form>
                     <a class="video-danmaku-login" data-video-danmaku-login href="/account">登录后发送弹幕</a>
                 </div>
-            </figure>"#,
-            embed.src, embed.mime_type, embed.src, embed.src, embed.mime_type, embed.label
+            </figure>"##,
+            embed.src, embed.mime_type, embed.danmaku_key, embed.src, embed.mime_type, embed.label
         );
         output = output.replace(&format!("<p>{}</p>\n", embed.token), &player);
         output = output.replace(&format!("<p>{}</p>", embed.token), &player);
@@ -322,12 +335,16 @@ fn main() {}
         assert!(html.contains("data-video-speed"));
         assert!(html.contains("data-video-toggle"));
         assert!(html.contains("data-video-progress"));
-        assert!(html.contains("data-video-mute"));
+        assert!(html.contains("data-video-volume"));
+        assert!(html.contains("data-video-volume-label"));
         assert!(html.contains("data-video-fullscreen"));
+        assert!(html.contains("video-fullscreen-button"));
+        assert!(html.contains("<svg viewBox=\"0 0 24 24\""));
+        assert!(html.contains("data-video-danmaku-color"));
         assert!(!html.contains(" controls "));
         assert!(html.contains("无法播放视频：Clion开发STM32"));
         assert!(html.contains("data-video-src=\"/assets/Clion-STM32.mp4\""));
-        assert!(html.contains("data-video-key=\"/assets/Clion-STM32.mp4\""));
+        assert!(html.contains("data-video-key=\"/assets/Clion-STM32.mp4#0\""));
         assert!(html.contains("source data-src=\"/assets/Clion-STM32.mp4\" type=\"video/mp4\""));
         assert!(!html.contains("video-label"));
         assert!(!html.contains("M2W_VIDEO_EMBED_0"));

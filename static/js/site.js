@@ -1463,12 +1463,14 @@ function wireVideoPlayers() {
     const progress = container.querySelector('[data-video-progress]');
     const progressFill = container.querySelector('[data-video-progress-fill]');
     const timeDisplay = container.querySelector('[data-video-time]');
-    const muteButton = container.querySelector('[data-video-mute]');
+    const volumeInput = container.querySelector('[data-video-volume]');
+    const volumeLabel = container.querySelector('[data-video-volume-label]');
     const fullscreenButton = container.querySelector('[data-video-fullscreen]');
     const speedSelect = container.querySelector('[data-video-speed]');
     const danmakuLayer = container.querySelector('[data-video-danmaku-layer]');
     const danmakuForm = container.querySelector('[data-video-danmaku-form]');
     const danmakuInput = container.querySelector('[data-video-danmaku-input]');
+    const danmakuColor = container.querySelector('[data-video-danmaku-color]');
     const danmakuLogin = container.querySelector('[data-video-danmaku-login]');
     const article = container.closest('[data-note-article]');
     if (!video || !source || video.dataset.videoWired === 'true') return;
@@ -1481,9 +1483,11 @@ function wireVideoPlayers() {
     const danmakuState = {
       items: [],
       shown: new Set(),
-      lastTime: 0,
+      lastTimeMs: 0,
       loaded: false,
+      seeking: false,
     };
+    let controlsTimer = 0;
 
     const formatTime = (sec) => {
       if (isNaN(sec) || !isFinite(sec)) return '00:00';
@@ -1509,11 +1513,26 @@ function wireVideoPlayers() {
         toggleButton.textContent = playing ? 'Ⅱ' : '▶';
         toggleButton.setAttribute('aria-label', playing ? '暂停' : '播放');
       }
-      if (muteButton) {
-        muteButton.textContent = video.muted || video.volume === 0 ? '静音' : '音量';
-        muteButton.setAttribute('aria-label', video.muted ? '取消静音' : '静音');
+      if (volumeInput) {
+        volumeInput.value = video.muted ? '0' : String(video.volume);
+      }
+      if (volumeLabel) {
+        const pct = video.muted ? 0 : Math.round(video.volume * 100);
+        volumeLabel.textContent = `${pct}%`;
       }
       updateTime();
+    };
+
+    const showControls = (sticky = false) => {
+      container.classList.add('is-controls-visible');
+      window.clearTimeout(controlsTimer);
+      if (!sticky && !video.paused && !video.ended) {
+        controlsTimer = window.setTimeout(() => {
+          if (!container.matches(':focus-within')) {
+            container.classList.remove('is-controls-visible');
+          }
+        }, 2200);
+      }
     };
 
     const showDanmaku = (item) => {
@@ -1521,26 +1540,32 @@ function wireVideoPlayers() {
       const node = document.createElement('span');
       node.className = 'video-danmaku-item';
       node.textContent = item.body;
+      node.style.color = item.color || '#fff';
       const lane = Math.abs(Number(item.id || item.time_ms || 0)) % 7;
       node.style.setProperty('--danmaku-top', `${8 + lane * 12}%`);
       danmakuLayer.appendChild(node);
       node.addEventListener('animationend', () => node.remove(), { once: true });
     };
 
-    const syncDanmaku = () => {
+    const syncDanmaku = (forceBaseline = false) => {
       if (!danmakuEnabled || !danmakuState.loaded) return;
       const currentMs = Math.floor(video.currentTime * 1000);
-      if (currentMs + 500 < danmakuState.lastTime) {
+      if (forceBaseline || danmakuState.seeking || Math.abs(currentMs - danmakuState.lastTimeMs) > 1800) {
         danmakuState.shown.clear();
+        danmakuState.lastTimeMs = currentMs;
+        danmakuState.seeking = false;
+        return;
       }
-      danmakuState.lastTime = currentMs;
+      const startMs = Math.min(danmakuState.lastTimeMs, currentMs);
+      const endMs = Math.max(danmakuState.lastTimeMs, currentMs) + 250;
       danmakuState.items.forEach((item) => {
         if (danmakuState.shown.has(item.id)) return;
-        if (item.time_ms <= currentMs + 250) {
+        if (item.time_ms >= startMs && item.time_ms <= endMs) {
           danmakuState.shown.add(item.id);
           showDanmaku(item);
         }
       });
+      danmakuState.lastTimeMs = currentMs;
     };
 
     const loadDanmaku = async () => {
@@ -1553,7 +1578,7 @@ function wireVideoPlayers() {
       const data = await response.json();
       danmakuState.items = data.danmaku || [];
       danmakuState.loaded = true;
-      syncDanmaku();
+      syncDanmaku(true);
     };
 
     const loadVideo = async (autoplay = false) => {
@@ -1562,10 +1587,12 @@ function wireVideoPlayers() {
         video.load();
       }
       container.classList.add('is-loaded');
+      showControls(!autoplay);
       if (!autoplay) return;
       try {
         await video.play();
         await loadDanmaku();
+        showControls();
         updateControls();
       } catch (error) {
         console.warn('Video playback failed', error);
@@ -1603,12 +1630,27 @@ function wireVideoPlayers() {
     video.addEventListener('play', () => {
       container.classList.add('is-loaded');
       loadDanmaku();
+      showControls();
       updateControls();
     });
 
-    video.addEventListener('pause', updateControls);
-    video.addEventListener('ended', updateControls);
+    video.addEventListener('pause', () => {
+      showControls(true);
+      updateControls();
+    });
+    video.addEventListener('ended', () => {
+      showControls(true);
+      updateControls();
+    });
     video.addEventListener('loadedmetadata', updateControls);
+    video.addEventListener('seeking', () => {
+      danmakuState.seeking = true;
+      danmakuState.lastTimeMs = Math.floor(video.currentTime * 1000);
+      danmakuLayer?.querySelectorAll('.video-danmaku-item').forEach((item) => item.remove());
+    });
+    video.addEventListener('seeked', () => {
+      syncDanmaku(true);
+    });
     video.addEventListener('timeupdate', () => {
       updateTime();
       syncDanmaku();
@@ -1621,11 +1663,14 @@ function wireVideoPlayers() {
       const rect = progress.getBoundingClientRect();
       const pct = (event.clientX - rect.left) / rect.width;
       video.currentTime = Math.min(video.duration, Math.max(0, pct * video.duration));
+      syncDanmaku(true);
       updateTime();
     });
 
-    muteButton?.addEventListener('click', () => {
-      video.muted = !video.muted;
+    volumeInput?.addEventListener('input', () => {
+      const volume = Number(volumeInput.value);
+      video.volume = Number.isFinite(volume) ? Math.min(1, Math.max(0, volume)) : 1;
+      video.muted = video.volume === 0;
       updateControls();
     });
 
@@ -1641,6 +1686,14 @@ function wireVideoPlayers() {
         return;
       }
       await target.requestFullscreen?.().catch(() => {});
+    });
+
+    container.addEventListener('pointermove', () => showControls());
+    container.addEventListener('pointerleave', () => {
+      if (!video.paused && !video.ended) {
+        window.clearTimeout(controlsTimer);
+        container.classList.remove('is-controls-visible');
+      }
     });
 
     if (danmakuEnabled) {
@@ -1661,6 +1714,7 @@ function wireVideoPlayers() {
         video_src: videoKey,
         time_ms: Math.max(0, Math.floor(video.currentTime * 1000)),
         body,
+        color: danmakuColor?.value || '#ffffff',
       };
       const response = await fetch(`/api/notes/${encodeURIComponent(noteSlug)}/danmaku`, {
         method: 'POST',

@@ -44,6 +44,7 @@ pub struct VideoDanmaku {
     pub video_src: String,
     pub time_ms: i64,
     pub body: String,
+    pub color: String,
     pub created_at: String,
 }
 
@@ -73,6 +74,7 @@ pub struct NewVideoDanmaku<'a> {
     pub video_src: &'a str,
     pub time_ms: i64,
     pub body: &'a str,
+    pub color: &'a str,
 }
 
 pub struct AppDatabase {
@@ -138,6 +140,7 @@ impl AppDatabase {
                 video_src TEXT NOT NULL,
                 time_ms INTEGER NOT NULL,
                 body TEXT NOT NULL,
+                color TEXT NOT NULL DEFAULT '#ffffff',
                 created_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_video_danmaku_lookup
@@ -145,6 +148,7 @@ impl AppDatabase {
             "#,
         )?;
         ensure_annotations_visibility_column(&conn)?;
+        ensure_video_danmaku_color_column(&conn)?;
 
         let exists: Option<String> = conn
             .query_row(
@@ -559,7 +563,7 @@ impl AppDatabase {
         let conn = self.conn.lock().expect("db mutex poisoned");
         let mut stmt = conn.prepare(
             r#"
-            SELECT id, username, note_slug, video_src, time_ms, body, created_at
+            SELECT id, username, note_slug, video_src, time_ms, body, color, created_at
             FROM video_danmaku
             WHERE note_slug = ?1 AND video_src = ?2
             ORDER BY time_ms ASC, id ASC
@@ -574,8 +578,8 @@ impl AppDatabase {
         let now = Utc::now().to_rfc3339();
         conn.execute(
             r#"
-            INSERT INTO video_danmaku(username, note_slug, video_src, time_ms, body, created_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            INSERT INTO video_danmaku(username, note_slug, video_src, time_ms, body, color, created_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
             "#,
             params![
                 danmaku.username,
@@ -583,6 +587,7 @@ impl AppDatabase {
                 danmaku.video_src,
                 danmaku.time_ms,
                 danmaku.body,
+                danmaku.color,
                 now,
             ],
         )?;
@@ -680,7 +685,7 @@ fn annotation_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<NoteAnnotati
 fn video_danmaku_by_id(conn: &Connection, id: i64) -> AppResult<Option<VideoDanmaku>> {
     conn.query_row(
         r#"
-        SELECT id, username, note_slug, video_src, time_ms, body, created_at
+        SELECT id, username, note_slug, video_src, time_ms, body, color, created_at
         FROM video_danmaku
         WHERE id = ?1
         "#,
@@ -699,8 +704,9 @@ fn video_danmaku_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<VideoDanm
         video_src: row.get(3)?,
         time_ms: row.get(4)?,
         body: row.get(5)?,
+        color: row.get(6)?,
         created_at: row
-            .get::<_, String>(6)
+            .get::<_, String>(7)
             .map(|s| time::format_cst(&s))
             .unwrap_or_default(),
     })
@@ -736,6 +742,29 @@ fn ensure_annotations_visibility_column(conn: &Connection) -> AppResult<()> {
     if !has_visibility {
         conn.execute(
             "ALTER TABLE annotations ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private'",
+            [],
+        )?;
+    }
+
+    Ok(())
+}
+
+fn ensure_video_danmaku_color_column(conn: &Connection) -> AppResult<()> {
+    let mut stmt = conn.prepare("PRAGMA table_info(video_danmaku)")?;
+    let mut rows = stmt.query([])?;
+    let mut has_color = false;
+
+    while let Some(row) = rows.next()? {
+        let name: String = row.get(1)?;
+        if name == "color" {
+            has_color = true;
+            break;
+        }
+    }
+
+    if !has_color {
+        conn.execute(
+            "ALTER TABLE video_danmaku ADD COLUMN color TEXT NOT NULL DEFAULT '#ffffff'",
             [],
         )?;
     }
