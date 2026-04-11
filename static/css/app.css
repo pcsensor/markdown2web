@@ -1256,6 +1256,14 @@ input:focus, textarea:focus, select:focus {
   background: white;
 }
 textarea { min-height: 120px; resize: vertical; }
+.turnstile-lazy {
+  min-height: 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+.turnstile-lazy[data-turnstile-error="true"] {
+  color: var(--danger);
+}
 button, .button {
   display: inline-flex;
   align-items: center;

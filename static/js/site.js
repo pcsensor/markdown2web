@@ -2,6 +2,7 @@ const reduceMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
 const finePointerQuery = window.matchMedia('(pointer: fine)');
 const prefersReducedMotion = () => reduceMotionQuery.matches;
 const hasFinePointer = () => finePointerQuery.matches;
+let turnstileScriptPromise = null;
 
 function markCurrentNav() {
   const current = window.location.pathname;
@@ -1213,6 +1214,7 @@ function init() {
   wireCodeBlocks();
   wireMobileNav();
   wireAccountToggle();
+  wireLazyTurnstile();
   wireAudioPlayers();
   wireVideoPlayers();
 }
@@ -1227,10 +1229,6 @@ function wireAccountToggle() {
   const switchTo = (target) => {
     loginPanel.style.display = target === 'login' ? '' : 'none';
     registerPanel.style.display = target === 'register' ? '' : 'none';
-    // Re-render Turnstile when panel becomes visible
-    if (window.turnstile) {
-      window.turnstile.reset();
-    }
   };
 
   showRegister.addEventListener('click', (e) => {
@@ -1242,6 +1240,124 @@ function wireAccountToggle() {
     e.preventDefault();
     switchTo('login');
   });
+}
+
+function wireLazyTurnstile() {
+  document.querySelectorAll('[data-turnstile-form]').forEach((form) => {
+    const container = form.querySelector('[data-turnstile-lazy]');
+    const responseInput = form.querySelector('[data-turnstile-response]');
+    const submitButton = form.querySelector('button[type="submit"]');
+    if (!container || !responseInput || form.dataset.turnstileWired === 'true') return;
+
+    form.dataset.turnstileWired = 'true';
+    let widgetId = null;
+    let pending = false;
+
+    const setSubmitting = (submitting) => {
+      pending = submitting;
+      if (submitButton) {
+        submitButton.disabled = submitting;
+        submitButton.textContent = submitting ? '正在验证…' : submitButton.dataset.originalText;
+      }
+    };
+
+    if (submitButton) {
+      submitButton.dataset.originalText = submitButton.textContent;
+    }
+
+    const removeDuplicateResponseFields = () => {
+      form
+        .querySelectorAll('input[name="cf-turnstile-response"]:not([data-turnstile-response])')
+        .forEach((field) => field.remove());
+    };
+
+    const renderWidget = () => {
+      if (widgetId !== null) return true;
+      if (!window.turnstile) return false;
+
+      widgetId = window.turnstile.render(container, {
+        sitekey: container.dataset.sitekey,
+        theme: container.dataset.theme || 'light',
+        execution: 'execute',
+        'response-field': false,
+        callback(token) {
+          responseInput.value = token;
+          removeDuplicateResponseFields();
+          setSubmitting(false);
+          HTMLFormElement.prototype.submit.call(form);
+        },
+        'error-callback'() {
+          responseInput.value = '';
+          setSubmitting(false);
+          container.dataset.turnstileError = 'true';
+        },
+        'expired-callback'() {
+          responseInput.value = '';
+        },
+      });
+
+      return widgetId !== undefined && widgetId !== null;
+    };
+
+    form.addEventListener('submit', async (event) => {
+      if (responseInput.value) {
+        removeDuplicateResponseFields();
+        return;
+      }
+      if (!form.checkValidity()) return;
+
+      event.preventDefault();
+      if (pending) return;
+
+      setSubmitting(true);
+      try {
+        await loadTurnstileScript();
+      } catch (error) {
+        console.warn('Turnstile script failed to load', error);
+        container.textContent = '人机验证加载失败，请刷新页面后重试。';
+        setSubmitting(false);
+        return;
+      }
+
+      if (!renderWidget()) {
+        container.textContent = '人机验证初始化失败，请刷新页面后重试。';
+        setSubmitting(false);
+        return;
+      }
+
+      responseInput.value = '';
+      container.dataset.turnstileError = 'false';
+      window.turnstile.execute(widgetId);
+    });
+  });
+}
+
+function loadTurnstileScript() {
+  if (window.turnstile) {
+    return Promise.resolve(window.turnstile);
+  }
+  if (turnstileScriptPromise) {
+    return turnstileScriptPromise;
+  }
+
+  turnstileScriptPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+    script.async = true;
+    script.defer = true;
+    script.crossOrigin = 'anonymous';
+    script.onload = () => {
+      if (window.turnstile) {
+        resolve(window.turnstile);
+      } else {
+        reject(new Error('Turnstile unavailable after script load'));
+      }
+    };
+    script.onerror = () => reject(new Error('Turnstile script load failed'));
+    document.head.appendChild(script);
+  });
+
+  return turnstileScriptPromise;
 }
 
 function wireAudioPlayers() {

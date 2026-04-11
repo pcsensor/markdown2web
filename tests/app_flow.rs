@@ -1255,6 +1255,34 @@ fn admin_user_management_wiring_exists() {
 }
 
 #[test]
+fn turnstile_runs_only_after_auth_form_submit() {
+    let base = fs::read_to_string("templates/base.html").unwrap();
+    let admin_login = fs::read_to_string("templates/admin/login.html").unwrap();
+    let account = fs::read_to_string("templates/account.html").unwrap();
+    let css = fs::read_to_string("static/css/app.css").unwrap();
+    let js = fs::read_to_string("static/js/site.js").unwrap();
+
+    assert!(!base.contains("challenges.cloudflare.com/turnstile"));
+    assert!(!admin_login.contains("class=\"cf-turnstile\""));
+    assert!(!account.contains("class=\"cf-turnstile\""));
+
+    assert!(admin_login.contains("data-turnstile-form"));
+    assert!(admin_login.contains("data-turnstile-response"));
+    assert!(admin_login.contains("data-turnstile-lazy"));
+    assert!(account.matches("data-turnstile-form").count() >= 2);
+    assert!(account.matches("data-turnstile-lazy").count() >= 2);
+
+    assert!(js.contains("function loadTurnstileScript()"));
+    assert!(js.contains("api.js?render=explicit"));
+    assert!(js.contains("await loadTurnstileScript();"));
+    assert!(js.contains("window.turnstile.execute(widgetId);"));
+    assert!(js.contains("'response-field': false"));
+    assert!(js.contains("removeDuplicateResponseFields"));
+    assert!(js.contains(r#"input[name="cf-turnstile-response"]:not([data-turnstile-response])"#));
+    assert!(css.contains(".turnstile-lazy"));
+}
+
+#[test]
 fn annotation_wiring_exists() {
     let base = fs::read_to_string("templates/base.html").unwrap();
     let note = fs::read_to_string("templates/note.html").unwrap();

@@ -30,7 +30,7 @@
     {% when None %}
       <div class="account-form-stack">
         <div id="login-panel"{% if register_error.is_some() %} style="display: none;"{% endif %}>
-          <form class="panel interactive-card auth-panel" action="/account/login" method="post">
+          <form class="panel interactive-card auth-panel" action="/account/login" method="post" data-turnstile-form>
             <p class="eyebrow">Login</p>
             <h2>登录账号</h2>
             {% match login_error %}
@@ -42,7 +42,8 @@
             <label>用户名<input type="text" name="username" value="{{ login_username }}" autocomplete="username" required /></label>
             <label>密码<input type="password" name="password" autocomplete="current-password" required /></label>
             {% if !turnstile_site_key.is_empty() %}
-            <div class="cf-turnstile" data-sitekey="{{ turnstile_site_key }}" data-theme="light"></div>
+            <input type="hidden" name="cf-turnstile-response" data-turnstile-response />
+            <div class="turnstile-lazy" data-turnstile-lazy data-sitekey="{{ turnstile_site_key }}" data-theme="light" aria-live="polite"></div>
             {% endif %}
             <button type="submit">登录并返回</button>
           </form>
@@ -50,7 +51,7 @@
         </div>
 
         <div id="register-panel"{% if register_error.is_some() %}{% else %} style="display: none;"{% endif %}>
-          <form class="panel interactive-card auth-panel" action="/account/register" method="post">
+          <form class="panel interactive-card auth-panel" action="/account/register" method="post" data-turnstile-form>
             <p class="eyebrow">Register</p>
             <h2>注册账号</h2>
             {% match register_error %}
@@ -62,7 +63,8 @@
             <label>用户名<input type="text" name="username" value="{{ register_username }}" autocomplete="username" required /></label>
             <label>密码<input type="password" name="password" minlength="8" autocomplete="new-password" required /></label>
             {% if !turnstile_site_key.is_empty() %}
-            <div class="cf-turnstile" data-sitekey="{{ turnstile_site_key }}" data-theme="light"></div>
+            <input type="hidden" name="cf-turnstile-response" data-turnstile-response />
+            <div class="turnstile-lazy" data-turnstile-lazy data-sitekey="{{ turnstile_site_key }}" data-theme="light" aria-live="polite"></div>
             {% endif %}
             <button type="submit">注册并登录</button>
           </form>
