@@ -1467,6 +1467,7 @@ function wireVideoPlayers() {
     const volumeLabel = container.querySelector('[data-video-volume-label]');
     const fullscreenButton = container.querySelector('[data-video-fullscreen]');
     const speedSelect = container.querySelector('[data-video-speed]');
+    const danmakuSizeSelect = container.querySelector('[data-video-danmaku-size]');
     const danmakuLayer = container.querySelector('[data-video-danmaku-layer]');
     const danmakuForm = container.querySelector('[data-video-danmaku-form]');
     const danmakuInput = container.querySelector('[data-video-danmaku-input]');
@@ -1678,6 +1679,11 @@ function wireVideoPlayers() {
       const rate = Number(speedSelect.value);
       video.playbackRate = Number.isFinite(rate) && rate > 0 ? rate : 1;
     });
+
+    danmakuSizeSelect?.addEventListener('change', () => {
+      container.style.setProperty('--danmaku-font-size', danmakuSizeSelect.value || '1.25rem');
+    });
+    container.style.setProperty('--danmaku-font-size', danmakuSizeSelect?.value || '1.25rem');
 
     fullscreenButton?.addEventListener('click', async () => {
       const target = container.querySelector('.video-player-frame') || container;

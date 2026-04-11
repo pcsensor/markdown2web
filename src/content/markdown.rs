@@ -219,6 +219,12 @@ fn restore_video_blocks(html: &str, video_embeds: &[VideoEmbed]) -> String {
                             <option value="1.5">1.5x</option>
                             <option value="2">2x</option>
                         </select>
+                        <select class="video-danmaku-size-select" data-video-danmaku-size data-static-button aria-label="弹幕字号">
+                            <option value="1rem">小字</option>
+                            <option value="1.25rem" selected>中字</option>
+                            <option value="1.5rem">大字</option>
+                            <option value="1.8rem">超大</option>
+                        </select>
                         <label class="video-volume-control" aria-label="音量">
                             <span data-video-volume-label>100%</span>
                             <input type="range" min="0" max="1" step="0.05" value="1" data-video-volume data-static-button />
@@ -333,6 +339,8 @@ fn main() {}
         assert!(html.contains("data-video-danmaku-layer"));
         assert!(html.contains("data-video-danmaku-form"));
         assert!(html.contains("data-video-speed"));
+        assert!(html.contains("data-video-danmaku-size"));
+        assert!(html.contains("1.25rem\" selected"));
         assert!(html.contains("data-video-toggle"));
         assert!(html.contains("data-video-progress"));
         assert!(html.contains("data-video-volume"));

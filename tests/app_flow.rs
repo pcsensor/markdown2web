@@ -541,6 +541,8 @@ status: published
     assert!(html.contains("data-video-danmaku-input"));
     assert!(html.contains("data-video-danmaku-login"));
     assert!(html.contains("data-video-speed"));
+    assert!(html.contains("data-video-danmaku-size"));
+    assert!(html.contains("1.25rem\" selected"));
     assert!(html.contains("data-video-key"));
     assert!(!html.contains(" controls "));
     assert!(html.contains("无法播放视频：演示视频"));
@@ -1695,6 +1697,8 @@ fn annotation_wiring_exists() {
     assert!(css.contains(".video-danmaku-item"));
     assert!(css.contains("@keyframes danmaku-fly"));
     assert!(css.contains(".video-speed-select"));
+    assert!(css.contains(".video-danmaku-size-select"));
+    assert!(css.contains("--danmaku-font-size, 1.25rem"));
     assert!(css.contains(".video-danmaku-form"));
     assert!(css.contains(".video-danmaku-color"));
     assert!(css.contains(".video-danmaku-login"));
@@ -1730,6 +1734,8 @@ fn annotation_wiring_exists() {
     assert!(js.contains("container.matches(':focus-within')"));
     assert!(js.contains("/danmaku"));
     assert!(js.contains("data-video-speed"));
+    assert!(js.contains("data-video-danmaku-size"));
+    assert!(js.contains("--danmaku-font-size"));
     assert!(js.contains("data-video-danmaku-form"));
     assert!(js.contains("data-video-danmaku-color"));
     assert!(js.contains("showDanmaku"));
