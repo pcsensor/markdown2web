@@ -1900,6 +1900,22 @@ button.secondary, .button.secondary {
   background: rgba(15, 23, 42, 0.78);
   color: #fff;
   box-shadow: 0 18px 38px rgba(15, 23, 42, 0.28);
+  transition: background-color 180ms ease-out, box-shadow 180ms ease-out, border-color 180ms ease-out;
+  will-change: background-color, box-shadow;
+}
+.video-load-button::before {
+  content: none;
+}
+.video-load-button:hover,
+.video-load-button:focus-visible {
+  transform: translate(-50%, -50%);
+  border-color: rgba(255, 255, 255, 0.68);
+  background: rgba(15, 23, 42, 0.88);
+  box-shadow: 0 20px 42px rgba(15, 23, 42, 0.34);
+}
+.video-load-button:active {
+  transform: translate(-50%, -50%);
+  filter: brightness(0.94);
 }
 .video-player.is-loaded .video-load-button {
   display: none;

@@ -201,7 +201,7 @@ fn restore_video_blocks(html: &str, video_embeds: &[VideoEmbed]) -> String {
                         <source data-src="{}" type="{}">
                         无法播放视频：{}
                     </video>
-                    <button type="button" class="video-load-button" data-video-load>播放视频</button>
+                    <button type="button" class="video-load-button" data-video-load data-static-button>播放视频</button>
                 </div>
             </figure>"#,
             embed.src, embed.mime_type, embed.src, embed.mime_type, embed.label

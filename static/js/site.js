@@ -247,6 +247,7 @@ function wireMascot() {
 function wireButtons() {
   if (prefersReducedMotion()) return;
   document.querySelectorAll('button, .button, .nav-link').forEach((element) => {
+    if (element.hasAttribute('data-static-button')) return;
     element.addEventListener('pointermove', (event) => {
       const rect = element.getBoundingClientRect();
       const px = ((event.clientX - rect.left) / rect.width) * 100;

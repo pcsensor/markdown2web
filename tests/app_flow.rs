@@ -297,7 +297,7 @@ status: published
     assert!(html.contains("video-player-frame"));
     assert!(html.contains("video-player-media"));
     assert!(html.contains("controls preload=\"none\" playsinline"));
-    assert!(html.contains("data-video-load"));
+    assert!(html.contains("data-video-load data-static-button"));
     assert!(html.contains("无法播放视频：演示视频"));
     assert!(!html.contains("video-label"));
 
@@ -1296,6 +1296,10 @@ fn annotation_wiring_exists() {
     assert!(css.contains(".responsive-image"));
     assert!(css.contains(".video-load-button"));
     assert!(css.contains(".video-player.is-loaded .video-load-button"));
+    assert!(css.contains(".video-load-button:hover"));
+    assert!(css.contains(".video-load-button:active"));
+    assert!(css.contains(".video-load-button::before"));
+    assert!(css.contains("transform: translate(-50%, -50%);"));
     assert!(css.contains(".note-article {"));
     assert!(css.contains("overflow-x: hidden;"));
     assert!(css.contains(".note-article.interactive-card:hover"));
@@ -1312,6 +1316,7 @@ fn annotation_wiring_exists() {
     assert!(js.contains("renderMath();"));
     assert!(js.contains("wireAudioPlayers();"));
     assert!(js.contains("wireVideoPlayers();"));
+    assert!(js.contains("element.hasAttribute('data-static-button')"));
     assert!(js.contains("source.setAttribute('src'"));
     assert!(js.contains("video.load();"));
     assert!(js.contains("const setPlaybackUi = () => {"));
