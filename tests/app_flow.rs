@@ -296,7 +296,8 @@ status: published
     assert!(html.contains("data-video-player"));
     assert!(html.contains("video-player-frame"));
     assert!(html.contains("video-player-media"));
-    assert!(html.contains("controls preload=\"metadata\" playsinline"));
+    assert!(html.contains("controls preload=\"none\" playsinline"));
+    assert!(html.contains("data-video-load"));
     assert!(html.contains("无法播放视频：演示视频"));
     assert!(!html.contains("video-label"));
 
@@ -308,7 +309,7 @@ status: published
         .expect("video asset should be materialized");
     assert!(html.contains(&asset.public_url));
 
-    let source_re = Regex::new(r#"source src="([^"]+demo-video\.mp4)""#).unwrap();
+    let source_re = Regex::new(r#"source data-src="([^"]+demo-video\.mp4)""#).unwrap();
     let source = source_re
         .captures(&html)
         .and_then(|caps| caps.get(1))
@@ -1292,6 +1293,9 @@ fn annotation_wiring_exists() {
     assert!(css.contains(".audio-play-btn.is-playing .audio-icon-pause"));
     assert!(css.contains(".video-player"));
     assert!(css.contains(".video-player-media"));
+    assert!(css.contains(".responsive-image"));
+    assert!(css.contains(".video-load-button"));
+    assert!(css.contains(".video-player.is-loaded .video-load-button"));
     assert!(css.contains(".note-article {"));
     assert!(css.contains("overflow-x: hidden;"));
     assert!(css.contains(".note-article.interactive-card:hover"));
@@ -1307,6 +1311,9 @@ fn annotation_wiring_exists() {
     assert!(js.contains("const renderAnnotations = () => {"));
     assert!(js.contains("renderMath();"));
     assert!(js.contains("wireAudioPlayers();"));
+    assert!(js.contains("wireVideoPlayers();"));
+    assert!(js.contains("source.setAttribute('src'"));
+    assert!(js.contains("video.load();"));
     assert!(js.contains("const setPlaybackUi = () => {"));
     assert!(js.contains("const updateTimeDisplay = () => {"));
     assert!(js.contains("playBtn.classList.toggle('is-playing', isPlaying);"));

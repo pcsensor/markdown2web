@@ -197,13 +197,14 @@ fn restore_video_blocks(html: &str, video_embeds: &[VideoEmbed]) -> String {
         let player = format!(
             r#"<figure class="video-player" data-video-player>
                 <div class="video-player-frame">
-                    <video class="video-player-media" controls preload="metadata" playsinline>
-                        <source src="{}" type="{}">
+                    <video class="video-player-media" controls preload="none" playsinline data-video-src="{}" data-video-type="{}">
+                        <source data-src="{}" type="{}">
                         无法播放视频：{}
                     </video>
+                    <button type="button" class="video-load-button" data-video-load>播放视频</button>
                 </div>
             </figure>"#,
-            embed.src, embed.mime_type, embed.label
+            embed.src, embed.mime_type, embed.src, embed.mime_type, embed.label
         );
         output = output.replace(&format!("<p>{}</p>\n", embed.token), &player);
         output = output.replace(&format!("<p>{}</p>", embed.token), &player);
@@ -290,9 +291,11 @@ fn main() {}
         let (html, _) = render_markdown("@[Clion开发STM32](/assets/Clion-STM32.mp4)").unwrap();
         assert!(html.contains("data-video-player"));
         assert!(html.contains("video-player-frame"));
-        assert!(html.contains("controls preload=\"metadata\" playsinline"));
+        assert!(html.contains("controls preload=\"none\" playsinline"));
+        assert!(html.contains("data-video-load"));
         assert!(html.contains("无法播放视频：Clion开发STM32"));
-        assert!(html.contains("source src=\"/assets/Clion-STM32.mp4\" type=\"video/mp4\""));
+        assert!(html.contains("data-video-src=\"/assets/Clion-STM32.mp4\""));
+        assert!(html.contains("source data-src=\"/assets/Clion-STM32.mp4\" type=\"video/mp4\""));
         assert!(!html.contains("video-label"));
         assert!(!html.contains("M2W_VIDEO_EMBED_0"));
     }

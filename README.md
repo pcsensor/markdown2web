@@ -7,7 +7,7 @@
 - 内容真源：`content/notes` 与 `content/assets`
 - 自动更新：启动服务后可监听内容目录并自动重建
 - 链接能力：支持相对 Markdown 链接与 `[[Wiki Link]]`
-- 资源能力：支持图片/附件复制到公开 `/assets/*` 路径
+- 资源能力：支持图片/附件复制到公开 `/assets/*` 路径，并在安装 `ffmpeg` 时自动生成轻量图片/视频派生资源
 - 数学公式：支持 LaTeX 公式渲染
 - 代码块：支持主流 fenced code block 语法高亮
 - 交互体验：支持滚动进度、卡片指针光效、复制代码按钮等微交互
@@ -20,6 +20,7 @@
 - SQLite (`rusqlite`)
 - Comrak
 - Notify
+- FFmpeg（可选，用于图片多尺寸生成、视频压缩和 poster 生成；缺失时会降级为原资源发布）
 
 ## 快速启动
 
@@ -48,6 +49,17 @@ generated/site/assets/  # 构建后的公开资源
 
 data/app.db             # SQLite 数据库
 ```
+
+## 大媒体优化
+
+项目会优先使用 `ffmpeg` 在构建阶段处理大媒体资源，降低低带宽服务器的传输压力：
+
+- Markdown 图片会生成多尺寸派生图，并在 HTML 中输出 `<picture>`、`srcset`、`loading="lazy"` 和 `decoding="async"`。
+- `@[描述](视频路径)` 视频会转为 `720p` 压缩 MP4，尽量生成 poster，并在页面中使用 `preload="none"` + 点击后加载的懒加载模式。
+- 生成物存在且比源文件新时会直接复用，不会每次 rebuild 都重复转码。
+- 如果 `ffmpeg` 不存在，或某个媒体文件处理失败，构建不会中断，会记录 warning 并回退到原资源懒加载/发布。
+
+生产部署建议把 `generated/site/assets` 放在对象存储或 CDN 后面，由主服务只承担 HTML 和 API 流量。
 
 ## 环境变量
 

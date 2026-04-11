@@ -9,7 +9,7 @@ use crate::{
     config::AppConfig,
     content::{
         AssetRecord, Note, SiteData,
-        assets::{AssetCandidate, materialize_assets},
+        assets::{AssetCandidate, apply_media_optimizations, materialize_assets},
         graph::build_site_data,
         links::{LinkLookup, rewrite_markdown},
         markdown::{render_markdown, word_count},
@@ -126,7 +126,14 @@ impl BuildService {
                     .map(|(slug, hash)| (slug.as_str(), hash.as_str())),
             )
         };
-        let site_assets = materialize_assets(&self.config, &all_assets)?;
+        let materialized_assets = materialize_assets(&self.config, &all_assets)?;
+        for note in &mut notes {
+            note.html = apply_media_optimizations(&note.html, &materialized_assets.media);
+        }
+        for warning in &materialized_assets.warnings {
+            self.db.log_build("warn", warning)?;
+        }
+        let site_assets = materialized_assets.records;
         let site_data = build_site_data(notes, broken_links, site_assets.clone(), reason.clone());
         {
             let mut site = self.site.write().await;

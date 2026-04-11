@@ -739,6 +739,7 @@ const updateToolbarState = () => {
     renderMath();
     wireCodeBlocks();
     wireAudioPlayers();
+    wireVideoPlayers();
     layoutComments();
     window.dispatchEvent(new CustomEvent('note-content-rendered'));
   };
@@ -1212,6 +1213,7 @@ function init() {
   wireMobileNav();
   wireAccountToggle();
   wireAudioPlayers();
+  wireVideoPlayers();
 }
 
 function wireAccountToggle() {
@@ -1332,6 +1334,39 @@ function wireAudioPlayers() {
 
     setPlaybackUi();
     updateTimeDisplay();
+  });
+}
+
+function wireVideoPlayers() {
+  document.querySelectorAll('[data-video-player]').forEach((container) => {
+    const video = container.querySelector('[data-video-src]');
+    const source = video?.querySelector('source[data-src]');
+    const loadButton = container.querySelector('[data-video-load]');
+    if (!video || !source || video.dataset.videoWired === 'true') return;
+
+    video.dataset.videoWired = 'true';
+
+    const loadVideo = async (autoplay = false) => {
+      if (!source.getAttribute('src')) {
+        source.setAttribute('src', source.dataset.src || video.dataset.videoSrc || '');
+        video.load();
+      }
+      container.classList.add('is-loaded');
+      if (!autoplay) return;
+      try {
+        await video.play();
+      } catch (error) {
+        console.warn('Video playback failed', error);
+      }
+    };
+
+    loadButton?.addEventListener('click', () => {
+      loadVideo(true);
+    });
+
+    video.addEventListener('play', () => {
+      container.classList.add('is-loaded');
+    });
   });
 }
 
