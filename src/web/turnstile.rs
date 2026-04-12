@@ -1,6 +1,6 @@
 use std::sync::LazyLock;
-
 use serde::Deserialize;
+use crate::config::AppConfig;
 
 static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
 
@@ -12,13 +12,13 @@ struct TurnstileResponse {
 }
 
 /// 验证 Cloudflare Turnstile token。
-/// 如果 secret_key 为空（未配置环境变量），直接返回 true 跳过验证。
+/// 如果配置中禁用了验证，或 secret_key 为空，直接返回 true 跳过验证。
 pub async fn verify_turnstile(
     token: &str,
-    secret_key: &str,
+    config: &AppConfig,
     remote_ip: Option<&str>,
 ) -> Result<bool, String> {
-    if secret_key.is_empty() {
+    if !config.turnstile_enabled || config.turnstile_secret_key.is_empty() {
         return Ok(true);
     }
 
@@ -27,7 +27,7 @@ pub async fn verify_turnstile(
     }
 
     let mut form = vec![
-        ("secret", secret_key.to_string()),
+        ("secret", config.turnstile_secret_key.to_string()),
         ("response", token.to_string()),
     ];
     if let Some(ip) = remote_ip {

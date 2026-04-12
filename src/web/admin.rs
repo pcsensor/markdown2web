@@ -31,6 +31,7 @@ struct LoginTemplate {
     username: String,
     error: Option<String>,
     success: Option<String>,
+    turnstile_enabled: bool,
     turnstile_site_key: String,
 }
 
@@ -155,6 +156,7 @@ pub async fn login_page(
             Some("updated") => Some("密码已更新，请使用新密码重新登录。".into()),
             _ => None,
         },
+        turnstile_enabled: state.config.turnstile_enabled,
         turnstile_site_key: state.config.turnstile_site_key.clone(),
     })
 }
@@ -165,7 +167,7 @@ pub async fn login(
     Form(form): Form<LoginForm>,
 ) -> AppResult<Response> {
     let token = form.cf_turnstile_response.as_deref().unwrap_or_default();
-    match turnstile::verify_turnstile(token, &state.config.turnstile_secret_key, None).await {
+    match turnstile::verify_turnstile(token, &state.config, None).await {
         Ok(true) => {}
         Ok(false) => {
             return render(LoginTemplate {
@@ -173,6 +175,7 @@ pub async fn login(
                 username: form.username,
                 error: Some("人机验证失败，请重试。".into()),
                 success: None,
+                turnstile_enabled: state.config.turnstile_enabled,
                 turnstile_site_key: state.config.turnstile_site_key.clone(),
             });
         }
@@ -180,8 +183,9 @@ pub async fn login(
             return render(LoginTemplate {
                 site_name: state.config.site_name.clone(),
                 username: form.username,
-                error: Some(format!("人机验证异常：{err}")),
+                error: Some(format!("验证服务异常: {err}")),
                 success: None,
+                turnstile_enabled: state.config.turnstile_enabled,
                 turnstile_site_key: state.config.turnstile_site_key.clone(),
             });
         }
@@ -193,6 +197,7 @@ pub async fn login(
             username: form.username,
             error: Some("Invalid username or password".into()),
             success: None,
+            turnstile_enabled: state.config.turnstile_enabled,
             turnstile_site_key: state.config.turnstile_site_key.clone(),
         });
     }

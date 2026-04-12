@@ -19,6 +19,7 @@ pub struct AppConfig {
     pub admin_username: String,
     pub admin_password: String,
     pub watch_enabled: bool,
+    pub turnstile_enabled: bool,
     pub upload_limit_mb: usize,
     pub turnstile_site_key: String,
     pub turnstile_secret_key: String,
@@ -53,8 +54,11 @@ impl AppConfig {
             admin_username: env::var("M2W_ADMIN_USERNAME").unwrap_or_else(|_| "admin".into()),
             admin_password: env::var("M2W_ADMIN_PASSWORD").unwrap_or_else(|_| "admin123456".into()),
             watch_enabled: env::var("M2W_WATCH_ENABLED")
-                .map(|v| !matches!(v.as_str(), "0" | "false" | "off"))
+                .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "on"))
                 .unwrap_or(true),
+            turnstile_enabled: env::var("M2W_TURNSTILE_ENABLED")
+                .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "on"))
+                .unwrap_or(false), // 默认设为 false 更安全，且方便本地测试
             upload_limit_mb: env::var("M2W_UPLOAD_LIMIT_MB")
                 .ok()
                 .and_then(|value| value.parse().ok())
