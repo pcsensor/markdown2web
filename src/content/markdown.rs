@@ -205,45 +205,47 @@ fn restore_video_blocks(html: &str, video_embeds: &[VideoEmbed]) -> String {
                     </video>
                     <div class="video-danmaku-layer" data-video-danmaku-layer aria-hidden="true"></div>
                     <button type="button" class="video-load-button" data-video-load data-static-button>播放视频</button>
-                    <div class="video-controls" data-video-controls>
-                        <button type="button" class="video-control-button video-play-toggle" data-video-toggle data-static-button aria-label="播放">▶</button>
-                        <div class="video-progress" data-video-progress>
-                            <div class="video-progress-fill" data-video-progress-fill></div>
+                    <div class="video-player-ui" data-video-ui>
+                        <div class="video-controls" data-video-controls>
+                            <button type="button" class="video-control-button video-play-toggle" data-video-toggle data-static-button aria-label="播放">▶</button>
+                            <div class="video-progress" data-video-progress>
+                                <div class="video-progress-fill" data-video-progress-fill></div>
+                            </div>
+                            <span class="video-time" data-video-time>00:00/00:00</span>
+                            <select class="video-speed-select" data-video-speed data-static-button aria-label="播放速度">
+                                <option value="0.5">0.5x</option>
+                                <option value="0.75">0.75x</option>
+                                <option value="1" selected>1x</option>
+                                <option value="1.25">1.25x</option>
+                                <option value="1.5">1.5x</option>
+                                <option value="2">2x</option>
+                            </select>
+                            <select class="video-danmaku-size-select" data-video-danmaku-size data-static-button aria-label="弹幕字号">
+                                <option value="1rem">小字</option>
+                                <option value="1.25rem" selected>中字</option>
+                                <option value="1.5rem">大字</option>
+                                <option value="1.8rem">超大</option>
+                            </select>
+                            <label class="video-volume-control" aria-label="音量">
+                                <span data-video-volume-label>100%</span>
+                                <input type="range" min="0" max="1" step="0.05" value="1" data-video-volume data-static-button />
+                            </label>
+                            <button type="button" class="video-control-button video-fullscreen-button" data-video-fullscreen data-static-button aria-label="全屏">
+                                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                    <path d="M4 9V4h5" />
+                                    <path d="M15 4h5v5" />
+                                    <path d="M20 15v5h-5" />
+                                    <path d="M9 20H4v-5" />
+                                </svg>
+                            </button>
                         </div>
-                        <span class="video-time" data-video-time>00:00/00:00</span>
-                        <select class="video-speed-select" data-video-speed data-static-button aria-label="播放速度">
-                            <option value="0.5">0.5x</option>
-                            <option value="0.75">0.75x</option>
-                            <option value="1" selected>1x</option>
-                            <option value="1.25">1.25x</option>
-                            <option value="1.5">1.5x</option>
-                            <option value="2">2x</option>
-                        </select>
-                        <select class="video-danmaku-size-select" data-video-danmaku-size data-static-button aria-label="弹幕字号">
-                            <option value="1rem">小字</option>
-                            <option value="1.25rem" selected>中字</option>
-                            <option value="1.5rem">大字</option>
-                            <option value="1.8rem">超大</option>
-                        </select>
-                        <label class="video-volume-control" aria-label="音量">
-                            <span data-video-volume-label>100%</span>
-                            <input type="range" min="0" max="1" step="0.05" value="1" data-video-volume data-static-button />
-                        </label>
-                        <button type="button" class="video-control-button video-fullscreen-button" data-video-fullscreen data-static-button aria-label="全屏">
-                            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                                <path d="M4 9V4h5" />
-                                <path d="M15 4h5v5" />
-                                <path d="M20 15v5h-5" />
-                                <path d="M9 20H4v-5" />
-                            </svg>
-                        </button>
+                        <form class="video-danmaku-form" data-video-danmaku-form>
+                            <input type="color" class="video-danmaku-color" data-video-danmaku-color value="#ffffff" aria-label="弹幕颜色" />
+                            <input type="text" data-video-danmaku-input maxlength="80" placeholder="登录后发送弹幕" />
+                            <button type="submit" data-static-button>发送</button>
+                        </form>
+                        <a class="video-danmaku-login" data-video-danmaku-login href="/account">登录后发送弹幕</a>
                     </div>
-                    <form class="video-danmaku-form" data-video-danmaku-form>
-                        <input type="color" class="video-danmaku-color" data-video-danmaku-color value="#ffffff" aria-label="弹幕颜色" />
-                        <input type="text" data-video-danmaku-input maxlength="80" placeholder="登录后发送弹幕" />
-                        <button type="submit" data-static-button>发送</button>
-                    </form>
-                    <a class="video-danmaku-login" data-video-danmaku-login href="/account">登录后发送弹幕</a>
                 </div>
             </figure>"##,
             embed.src, embed.mime_type, embed.danmaku_key, embed.src, embed.mime_type, embed.label
