@@ -1533,7 +1533,14 @@ function wireVideoPlayers() {
       // 如果视频正在播放且不是强制常驻模式，开启自动隐藏定时器
       if (!sticky && !video.paused && !video.ended) {
         controlsTimer = window.setTimeout(() => {
-          if (!container.matches(':focus-within')) {
+          // 如果焦点在输入框或选择框上（如正在输入弹幕），则不自动隐藏
+          const active = document.activeElement;
+          const isInteracting = active && container.contains(active) && (
+            active.tagName === 'INPUT' || 
+            active.tagName === 'SELECT' || 
+            active.tagName === 'TEXTAREA'
+          );
+          if (!isInteracting) {
             container.classList.remove('is-controls-visible');
           }
         }, 2500);
@@ -1762,6 +1769,9 @@ function wireVideoPlayers() {
     });
 
     container.addEventListener('pointermove', () => {
+      showControls();
+    });
+    container.addEventListener('focusin', () => {
       showControls();
     });
     container.addEventListener('pointerleave', () => {
