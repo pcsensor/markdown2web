@@ -1702,6 +1702,32 @@ function wireVideoPlayers() {
       }
     });
 
+    // 允许容器接收焦点以支持键盘控制
+    container.tabIndex = 0;
+    container.addEventListener('keydown', (e) => {
+      // 如果正在输入文字，不触发快捷键
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+
+      const step = 3; // 前进/后退步长 3s
+      switch (e.key) {
+        case ' ':
+          e.preventDefault();
+          if (video.paused) video.play(); else video.pause();
+          showControls();
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          video.currentTime = Math.max(0, video.currentTime - step);
+          showControls();
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          video.currentTime = Math.min(video.duration, video.currentTime + step);
+          showControls();
+          break;
+      }
+    });
+
     if (danmakuEnabled) {
       danmakuForm?.classList.add('is-enabled');
       if (danmakuInput) danmakuInput.placeholder = '发送弹幕';
