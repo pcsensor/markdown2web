@@ -113,6 +113,9 @@ impl BuildService {
                 let mut p = progress_ptr.write().await;
                 p.is_running = false;
                 p.current_job = None;
+                // 重置计数器，标记处理流已彻底结束，防止 UI 唤醒
+                p.total_jobs = 0;
+                p.completed_jobs = 0;
             }
             println!("Background media processing complete.");
         });

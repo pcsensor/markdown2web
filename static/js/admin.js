@@ -17,7 +17,8 @@
       
       const data = await response.json();
       
-      if (data.is_running || data.completed_jobs < data.total_jobs) {
+      // 只有当有任务在运行，或者刚完成（且还没被后端重置）时才显示
+      if (data.total_jobs > 0) {
         panel.style.display = 'block';
         
         const total = data.total_jobs || 0;
