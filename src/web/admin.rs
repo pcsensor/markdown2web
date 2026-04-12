@@ -84,6 +84,7 @@ struct EditableNote {
     tags: String,
     category: String,
     status: String,
+    updated: String,
     aliases: String,
     body: String,
 }
@@ -105,6 +106,7 @@ pub struct SaveNoteForm {
     tags: Option<String>,
     category: Option<String>,
     status: Option<String>,
+    updated: Option<String>,
     aliases: Option<String>,
     body: String,
 }
@@ -515,6 +517,7 @@ pub async fn edit_note_page(
             tags: front_matter.tags.join(", "),
             category: front_matter.category.join(", "),
             status: front_matter.status.unwrap_or(note.status),
+            updated: front_matter.updated.unwrap_or(note.updated_at),
             aliases: front_matter.aliases.join(", "),
             body,
         },
@@ -540,6 +543,7 @@ pub async fn save_note(
         tags: csv_to_vec(form.tags.as_deref().unwrap_or_default()),
         category: csv_to_vec(form.category.as_deref().unwrap_or_default()),
         status: Some(form.status.unwrap_or_else(|| "published".into())),
+        updated: form.updated.filter(|s| !s.trim().is_empty()),
         aliases: csv_to_vec(form.aliases.as_deref().unwrap_or_default()),
     };
     let contents = compose_markdown(&front_matter, &form.body)?;

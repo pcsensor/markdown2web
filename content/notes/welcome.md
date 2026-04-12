@@ -2,14 +2,15 @@
 title: Welcome to markdown2web
 slug: welcome
 summary: A starter note showing Markdown rendering, wiki links, and assets.
+category: []
 tags:
-  - intro
-  - starter
+- intro
+- starter
 status: published
+updated: 2026-04-08T14:49
 aliases:
-  - home
+- home
 ---
-
 # Welcome
 
 This project turns Markdown files into a public website powered by Rust.

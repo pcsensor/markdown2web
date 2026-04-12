@@ -27,6 +27,12 @@
         <option value="draft" {% if note.status == "draft" %}selected{% endif %}>draft</option>
       </select>
     </label>
+    <label>更新时间
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <input type="datetime-local" name="updated" id="note-updated" value="{{ note.updated }}" style="flex: 1;" />
+        <button type="button" class="button secondary" id="set-now-btn" style="padding: 0.4em 0.8em; font-size: 0.85rem; white-space: nowrap;">设为现在</button>
+      </div>
+    </label>
     <div class="admin-actions">
       <button type="submit">保存笔记</button>
       <a class="button secondary" href="/admin">返回仪表盘</a>
@@ -41,4 +47,35 @@
     <label>正文<textarea name="body" class="editor-textarea">{{ note.body }}</textarea></label>
   </div>
 </form>
+
+<script>
+  window.addEventListener('DOMContentLoaded', () => {
+    const updatedInput = document.getElementById('note-updated');
+    const setNowBtn = document.getElementById('set-now-btn');
+
+    function formatDateTime(date) {
+      const yyyy = date.getFullYear();
+      const mm = String(date.getMonth() + 1).padStart(2, '0');
+      const dd = String(date.getDate()).padStart(2, '0');
+      const hh = String(date.getHours()).padStart(2, '0');
+      const min = String(date.getMinutes()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+    }
+
+    // 自动填充空值
+    if (updatedInput && !updatedInput.value.trim()) {
+      updatedInput.value = formatDateTime(new Date());
+    } else if (updatedInput.value.includes(' ')) {
+      // 兼容旧的 "YYYY-MM-DD HH:MM" 格式到 "YYYY-MM-DDTHH:MM"
+      updatedInput.value = updatedInput.value.replace(' ', 'T');
+    }
+
+    // “设为现在”按钮逻辑
+    if (setNowBtn && updatedInput) {
+      setNowBtn.addEventListener('click', () => {
+        updatedInput.value = formatDateTime(new Date());
+      });
+    }
+  });
+</script>
 {% endblock %}

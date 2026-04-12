@@ -9,6 +9,7 @@ tags:
 - issues
 - study
 status: published
+updated: 2026-04-10T19:23
 aliases: []
 ---
 # 静默启动`wsl`

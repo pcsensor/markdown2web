@@ -577,16 +577,11 @@ fn command_available(command: &str) -> bool {
         .is_ok_and(|status| status.success())
 }
 
-fn generated_is_fresh(source: &Path, destination: &Path) -> bool {
-    let Ok(source_modified) = fs::metadata(source).and_then(|metadata| metadata.modified()) else {
-        return false;
-    };
-    let Ok(destination_modified) =
-        fs::metadata(destination).and_then(|metadata| metadata.modified())
-    else {
-        return false;
-    };
-    destination_modified >= source_modified
+fn generated_is_fresh(_source: &Path, destination: &Path) -> bool {
+    // 由于我们的文件名已经包含了基于内容的稳定哈希，
+    // 只要目标文件存在，就说明该版本的资源已经处理过且是“新鲜”的。
+    // 这避免了由于 Git 同步或部署导致源文件 mtime 变新而触发的重复处理。
+    destination.exists()
 }
 
 pub fn run_ffmpeg(args: Vec<String>) -> bool {

@@ -23,6 +23,7 @@ use crate::content::assets::MediaJob;
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct BuildProgress {
+    pub session_id: u64,
     pub is_running: bool,
     pub total_jobs: usize,
     pub completed_jobs: usize,
@@ -33,6 +34,7 @@ pub struct BuildProgress {
 impl Default for BuildProgress {
     fn default() -> Self {
         Self {
+            session_id: 0,
             is_running: false,
             total_jobs: 0,
             completed_jobs: 0,
@@ -79,11 +81,20 @@ impl BuildService {
     }
 
     pub async fn spawn_media_worker(self: Arc<Self>, jobs: Vec<MediaJob>) {
+        if jobs.is_empty() {
+            // 如果没有新任务，保持静默，不更新 session_id
+            let mut p = self.progress.write().await;
+            p.is_running = false;
+            return;
+        }
+        
         let progress_ptr = self.progress.clone();
+        let new_session_id = rand::random::<u64>();
         
         tokio::spawn(async move {
             {
                 let mut p = progress_ptr.write().await;
+                p.session_id = new_session_id;
                 p.is_running = true;
                 p.total_jobs = jobs.len();
                 p.completed_jobs = 0;
@@ -113,9 +124,6 @@ impl BuildService {
                 let mut p = progress_ptr.write().await;
                 p.is_running = false;
                 p.current_job = None;
-                // 重置计数器，标记处理流已彻底结束，防止 UI 唤醒
-                p.total_jobs = 0;
-                p.completed_jobs = 0;
             }
             println!("Background media processing complete.");
         });
@@ -149,13 +157,13 @@ impl BuildService {
             all_assets.extend(rewritten.assets);
             broken_links.extend(rewritten.broken_links);
             new_hashes.insert(source.slug.clone(), source.hash.clone());
-            // Compute last modification time from the source markdown file to display
-            // the actual file's last modified timestamp instead of the build time.
-            let updated_at = {
+            // Compute last modification time: FrontMatter.updated > filesystem mtime
+            let updated_at = if let Some(fm_updated) = &source.front_matter.updated {
+                fm_updated.clone()
+            } else {
                 match std::fs::metadata(&source.source_path) {
                     Ok(meta) => match meta.modified() {
                         Ok(mtime) => {
-                            // Convert SystemTime -> DateTime<Utc>, then to CST (UTC+8)
                             let dt_utc: DateTime<Utc> = DateTime::<Utc>::from(mtime);
                             dt_utc
                                 .with_timezone(
@@ -164,9 +172,9 @@ impl BuildService {
                                 .format("%Y-%m-%d %H:%M")
                                 .to_string()
                         }
-                        Err(_) => time::now_cst_display(),
+                        Err(_) => source.front_matter.updated.clone().unwrap_or_else(time::now_cst_display),
                     },
-                    Err(_) => time::now_cst_display(),
+                    Err(_) => source.front_matter.updated.clone().unwrap_or_else(time::now_cst_display),
                 }
             };
             // Prepare a clone for created_at before moving updated_at into Note

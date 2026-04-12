@@ -65,6 +65,7 @@ pub fn discover_notes(config: &AppConfig) -> AppResult<Vec<NoteSource>> {
                 summary: Some(summary.clone()),
                 tags: front_matter.tags.clone(),
                 status: front_matter.status.clone(),
+                updated: front_matter.updated.clone(),
                 aliases: front_matter.aliases.clone(),
                 category: front_matter.category.clone(),
             },

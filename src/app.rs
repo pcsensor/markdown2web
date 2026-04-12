@@ -36,7 +36,7 @@ impl AppState {
         
         let summary = build_service.rebuild("startup").await?;
         
-        // 启动后台媒体处理任务
+        // 启动后台媒体处理任务 (仅在有任务时触发)
         if !summary.media_jobs.is_empty() {
             let service_clone = build_service.clone();
             service_clone.spawn_media_worker(summary.media_jobs).await;

@@ -32,6 +32,7 @@ pub struct FrontMatter {
     #[serde(default)]
     pub tags: Vec<String>,
     pub status: Option<String>,
+    pub updated: Option<String>,
     #[serde(default)]
     pub aliases: Vec<String>,
 }
