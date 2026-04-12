@@ -2125,6 +2125,33 @@ button.secondary, .button.secondary {
   display: none;
 }
 
+.upload-progress-container {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.upload-progress-bar-bg {
+  flex: 1;
+  height: 6px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.upload-progress-bar {
+  width: 0%;
+  height: 100%;
+  background: var(--accent-2);
+  transition: width 0.2s ease;
+}
+.upload-progress-text {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent-2);
+  min-width: 3em;
+  text-align: right;
+}
+
 @media (max-width: 640px) {
   .video-player-ui {
     padding: 0.4em;

@@ -63,4 +63,63 @@
   // 每 1.5 秒轮询一次
   pollTimer = setInterval(checkProgress, 1500);
   checkProgress(); // 立即执行一次
+
+  // --- 上传进度处理逻辑 ---
+  function wireUploadForm(formId, containerId, barId, textId) {
+    const form = document.getElementById(formId);
+    if (!form) return;
+
+    const container = document.getElementById(containerId);
+    const bar = document.getElementById(barId);
+    const text = document.getElementById(textId);
+    const submitBtn = form.querySelector('button[type="submit"]');
+
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      
+      const formData = new FormData(form);
+      const xhr = new XMLHttpRequest();
+
+      // 显示进度条，禁用按钮
+      container.style.display = 'flex';
+      bar.style.width = '0%';
+      text.textContent = '0%';
+      submitBtn.disabled = true;
+      submitBtn.style.opacity = '0.5';
+
+      xhr.upload.addEventListener('progress', function(e) {
+        if (e.lengthComputable) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          bar.style.width = percent + '%';
+          text.textContent = percent + '%';
+        }
+      });
+
+      xhr.addEventListener('load', function() {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          text.textContent = '完成!';
+          // 上传成功后刷新页面以显示新内容
+          setTimeout(() => window.location.reload(), 500);
+        } else {
+          alert('上传失败: ' + xhr.statusText);
+          container.style.display = 'none';
+          submitBtn.disabled = false;
+          submitBtn.style.opacity = '1';
+        }
+      });
+
+      xhr.addEventListener('error', function() {
+        alert('网络错误，请重试');
+        container.style.display = 'none';
+        submitBtn.disabled = false;
+        submitBtn.style.opacity = '1';
+      });
+
+      xhr.open('POST', form.action);
+      xhr.send(formData);
+    });
+  }
+
+  wireUploadForm('upload-markdown-form', 'markdown-progress-container', 'markdown-progress-bar', 'markdown-progress-text');
+  wireUploadForm('upload-asset-form', 'asset-progress-container', 'asset-progress-bar', 'asset-progress-text');
 })();

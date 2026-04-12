@@ -41,17 +41,29 @@
       <h2>上传 Markdown</h2>
       <span class="panel-chip">notes</span>
     </div>
-    <form action="/admin/upload/markdown" method="post" enctype="multipart/form-data" class="stack-form">
+    <form id="upload-markdown-form" action="/admin/upload/markdown" method="post" enctype="multipart/form-data" class="stack-form">
       <input type="file" name="file" accept=".md,.markdown" required />
       <button type="submit">上传文件</button>
+      <div id="markdown-progress-container" class="upload-progress-container" style="display: none;">
+        <div class="upload-progress-bar-bg">
+          <div id="markdown-progress-bar" class="upload-progress-bar"></div>
+        </div>
+        <span id="markdown-progress-text" class="upload-progress-text">0%</span>
+      </div>
     </form>
     <div class="panel-title-row second">
       <h2>上传资源</h2>
       <span class="panel-chip">assets</span>
     </div>
-    <form action="/admin/upload/asset" method="post" enctype="multipart/form-data" class="stack-form">
+    <form id="upload-asset-form" action="/admin/upload/asset" method="post" enctype="multipart/form-data" class="stack-form">
       <input type="file" name="file" accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.mp3,.mp4,.pdf,.txt,.zip" required />
       <button type="submit">上传资源</button>
+      <div id="asset-progress-container" class="upload-progress-container" style="display: none;">
+        <div class="upload-progress-bar-bg">
+          <div id="asset-progress-bar" class="upload-progress-bar"></div>
+        </div>
+        <span id="asset-progress-text" class="upload-progress-text">0%</span>
+      </div>
     </form>
 
     <div class="panel-title-row second">
