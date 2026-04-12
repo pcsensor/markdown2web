@@ -33,9 +33,9 @@ impl AppState {
         filesystem::ensure_sample_content(&config)?;
         let site = Arc::new(RwLock::new(SiteData::default()));
         let build_service = Arc::new(BuildService::new(config.clone(), db.clone(), site.clone())?);
-        
+
         let summary = build_service.rebuild("startup").await?;
-        
+
         // 启动后台媒体处理任务 (仅在有任务时触发)
         if !summary.media_jobs.is_empty() {
             let service_clone = build_service.clone();

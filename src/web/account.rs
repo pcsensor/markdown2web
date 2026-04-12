@@ -112,8 +112,6 @@ pub async fn account_page(
         String::new(),
         None,
         None,
-        state.config.turnstile_enabled,
-        state.config.turnstile_site_key.clone(),
     )
 }
 
@@ -139,8 +137,6 @@ pub async fn register(
                 form.username.trim().to_string(),
                 None,
                 Some("人机验证失败，请重试。".into()),
-                state.config.turnstile_enabled,
-                state.config.turnstile_site_key.clone(),
             );
         }
         Err(err) => {
@@ -152,8 +148,6 @@ pub async fn register(
                 form.username.trim().to_string(),
                 None,
                 Some(format!("人机验证异常：{err}")),
-                state.config.turnstile_enabled,
-                state.config.turnstile_site_key.clone(),
             );
         }
     }
@@ -168,8 +162,6 @@ pub async fn register(
             username,
             None,
             Some("用户名不能为空。".into()),
-            state.config.turnstile_enabled,
-            state.config.turnstile_site_key.clone(),
         );
     }
     if form.password.trim().len() < 8 {
@@ -181,8 +173,6 @@ pub async fn register(
             username,
             None,
             Some("密码至少需要 8 个字符。".into()),
-            state.config.turnstile_enabled,
-            state.config.turnstile_site_key.clone(),
         );
     }
     if !state.db.register_public_user(&username, &form.password)? {
@@ -194,8 +184,6 @@ pub async fn register(
             username,
             None,
             Some("该用户名已被注册。".into()),
-            state.config.turnstile_enabled,
-            state.config.turnstile_site_key.clone(),
         );
     }
     let token = state.db.create_public_session(&username)?;
@@ -228,8 +216,6 @@ pub async fn login(
                 String::new(),
                 Some("人机验证失败，请重试。".into()),
                 None,
-                state.config.turnstile_enabled,
-                state.config.turnstile_site_key.clone(),
             );
         }
         Err(err) => {
@@ -241,8 +227,6 @@ pub async fn login(
                 String::new(),
                 Some(format!("人机验证异常：{err}")),
                 None,
-                state.config.turnstile_enabled,
-                state.config.turnstile_site_key.clone(),
             );
         }
     }
@@ -257,8 +241,6 @@ pub async fn login(
             String::new(),
             Some("用户名或密码错误。".into()),
             None,
-            state.config.turnstile_enabled,
-            state.config.turnstile_site_key.clone(),
         );
     }
 
@@ -498,27 +480,34 @@ fn normalize_video_src(value: String) -> AppResult<(String, String)> {
     if value.is_empty() || value.len() > 512 {
         return Err(AppError::BadRequest("video source is invalid".into()));
     }
-    
-    // 1. 移除锚点参数 (如 #0) 获取干净的完整路径
-    let full_path = value
-        .split_once('#')
-        .map(|(path, _)| path)
-        .unwrap_or(value)
-        .to_string();
 
-    if !full_path.starts_with("/assets/") {
-        return Err(AppError::BadRequest("video source must be a site asset".into()));
+    // Keep the generated per-video suffix (`#0`, `#1`, ...) so repeated
+    // embeds of the same asset do not share one danmaku timeline.
+    let (path, fragment) = value.split_once('#').unwrap_or((value, ""));
+
+    if !path.starts_with("/assets/") {
+        return Err(AppError::BadRequest(
+            "video source must be a site asset".into(),
+        ));
     }
 
-    // 2. 提取原始文件名 (剥离路径和可能的哈希前缀)
-    let asset_name = full_path.strip_prefix("/assets/").unwrap_or(&full_path);
+    let fragment_suffix = if fragment.is_empty() {
+        String::new()
+    } else {
+        format!("#{fragment}")
+    };
+    let full_src = format!("{path}{fragment_suffix}");
+
+    // 提取原始文件名（剥离路径和可能的哈希前缀），同时保留实例后缀。
+    let asset_name = path.strip_prefix("/assets/").unwrap_or(path);
     let filename = if asset_name.len() > 13 && asset_name.as_bytes()[12] == b'-' {
         &asset_name[13..]
     } else {
         asset_name
-    }.to_string();
+    };
+    let filename = format!("{filename}{fragment_suffix}");
 
-    Ok((full_path, filename))
+    Ok((full_src, filename))
 }
 
 fn normalize_danmaku_body(value: String) -> AppResult<String> {
@@ -547,8 +536,6 @@ fn render_account(
     register_username: String,
     login_error: Option<String>,
     register_error: Option<String>,
-    turnstile_enabled: bool,
-    turnstile_site_key: String,
 ) -> AppResult<Response> {
     AccountTemplate {
         site_name: state.config.site_name.clone(),
@@ -558,8 +545,8 @@ fn render_account(
         register_username,
         login_error,
         register_error,
-        turnstile_enabled,
-        turnstile_site_key,
+        turnstile_enabled: state.config.turnstile_enabled,
+        turnstile_site_key: state.config.turnstile_site_key.clone(),
     }
     .render()
     .map(Html)

@@ -1,4 +1,8 @@
-use std::{collections::HashMap, fs, path::Path};
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+    path::Path,
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -6,7 +10,10 @@ use crate::error::{AppError, AppResult};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct BuildCache {
+    #[serde(default)]
     pub note_hashes: HashMap<String, String>,
+    #[serde(default)]
+    pub media_job_destinations: HashSet<String>,
 }
 
 impl BuildCache {

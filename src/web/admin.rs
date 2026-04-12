@@ -553,7 +553,11 @@ pub async fn save_note(
         .rebuild(format!("admin save {}", slug))
         .await?;
     if !summary.media_jobs.is_empty() {
-        state.build_service.clone().spawn_media_worker(summary.media_jobs).await;
+        state
+            .build_service
+            .clone()
+            .spawn_media_worker(summary.media_jobs)
+            .await;
     }
     Ok(Redirect::to("/admin").into_response())
 }
@@ -594,7 +598,11 @@ pub async fn upload_markdown(
     }
     let summary = state.build_service.rebuild("markdown upload").await?;
     if !summary.media_jobs.is_empty() {
-        state.build_service.clone().spawn_media_worker(summary.media_jobs).await;
+        state
+            .build_service
+            .clone()
+            .spawn_media_worker(summary.media_jobs)
+            .await;
     }
     Ok(Redirect::to("/admin").into_response())
 }
@@ -627,7 +635,11 @@ pub async fn upload_asset(
     }
     let summary = state.build_service.rebuild("asset upload").await?;
     if !summary.media_jobs.is_empty() {
-        state.build_service.clone().spawn_media_worker(summary.media_jobs).await;
+        state
+            .build_service
+            .clone()
+            .spawn_media_worker(summary.media_jobs)
+            .await;
     }
     Ok(Redirect::to("/admin").into_response())
 }
@@ -638,7 +650,11 @@ pub async fn rebuild_site(State(state): State<AppState>, jar: CookieJar) -> AppR
     };
     let summary = state.build_service.rebuild("manual rebuild").await?;
     if !summary.media_jobs.is_empty() {
-        state.build_service.clone().spawn_media_worker(summary.media_jobs).await;
+        state
+            .build_service
+            .clone()
+            .spawn_media_worker(summary.media_jobs)
+            .await;
     }
     Ok(Redirect::to("/admin").into_response())
 }

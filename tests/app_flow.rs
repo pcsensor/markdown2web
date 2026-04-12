@@ -34,6 +34,7 @@ fn test_config(temp: &TempDir) -> AppConfig {
         admin_username: "admin".into(),
         admin_password: "admin123456".into(),
         watch_enabled: false,
+        turnstile_enabled: false,
         upload_limit_mb: 10,
         turnstile_site_key: String::new(),
         turnstile_secret_key: String::new(),
@@ -504,11 +505,15 @@ status: published
 "#,
     )
     .unwrap();
-    state
+    let summary = state
         .build_service
-        .rebuild("test video embed")
+        .rebuild("admin save video-note")
         .await
         .unwrap();
+    assert!(
+        summary.media_jobs.is_empty(),
+        "admin note saves should not start media processing when media files did not change"
+    );
 
     let response = router
         .clone()
@@ -1279,11 +1284,11 @@ async fn public_user_auth_and_annotation_api_flow() {
 }
 
 #[tokio::test]
-async fn danmaku_api_requires_login_and_persists_by_video_time() {
+async fn danmaku_api_allows_public_list_and_requires_login_to_post() {
     let (_temp, _state, router) = setup().await;
     let video_key = "/assets/demo-video.mp4#0";
 
-    let unauthorized_list = router
+    let public_list = router
         .clone()
         .oneshot(
             Request::builder()
@@ -1293,7 +1298,10 @@ async fn danmaku_api_requires_login_and_persists_by_video_time() {
         )
         .await
         .unwrap();
-    assert_eq!(unauthorized_list.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(public_list.status(), StatusCode::OK);
+    let body = to_bytes(public_list.into_body(), usize::MAX).await.unwrap();
+    let listed: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(listed["danmaku"].as_array().unwrap().len(), 0);
 
     let unauthorized_create = router
         .clone()
@@ -1691,7 +1699,7 @@ fn annotation_wiring_exists() {
     assert!(css.contains(".video-time"));
     assert!(css.contains(".video-volume-control"));
     assert!(css.contains(".video-fullscreen-button svg"));
-    assert!(css.contains("rgba(255, 255, 255, 0.98)"));
+    assert!(css.contains("rgba(255, 255, 255, 0.94)"));
     assert!(css.contains("#00a1d6"));
     assert!(css.contains(".video-danmaku-layer"));
     assert!(css.contains(".video-danmaku-item"));

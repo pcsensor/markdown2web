@@ -76,30 +76,29 @@ fn normalize_join(base: &Path, relative: &str) -> PathBuf {
 fn hashed_name(path: &Path) -> AppResult<String> {
     let metadata = fs::metadata(path)?;
     let size = metadata.len();
-    
+
     let mut hasher = Sha256::new();
     hasher.update(size.to_le_bytes());
 
     // 快速采样策略：读取文件头和尾各最多 4KB，代替脆弱的修改时间(mtime)
-    if size > 0 {
-        if let Ok(mut file) = File::open(path) {
-            let chunk_size = 4096;
-            let mut buffer = vec![0; chunk_size];
-            
-            // 采样头部 4KB
-            let head_read = file.read(&mut buffer).unwrap_or(0);
-            if head_read > 0 {
-                hasher.update(&buffer[..head_read]);
-            }
-            
-            // 如果文件大于 8KB，再采样尾部 4KB (很多媒体文件的元数据在尾部)
-            if size > (chunk_size * 2) as u64 {
-                if file.seek(SeekFrom::End(-(chunk_size as i64))).is_ok() {
-                    let tail_read = file.read(&mut buffer).unwrap_or(0);
-                    if tail_read > 0 {
-                        hasher.update(&buffer[..tail_read]);
-                    }
-                }
+    if size > 0
+        && let Ok(mut file) = File::open(path)
+    {
+        let chunk_size = 4096;
+        let mut buffer = vec![0; chunk_size];
+
+        // 采样头部 4KB
+        let head_read = file.read(&mut buffer).unwrap_or(0);
+        if head_read > 0 {
+            hasher.update(&buffer[..head_read]);
+        }
+
+        // 如果文件大于 8KB，再采样尾部 4KB (很多媒体文件的元数据在尾部)
+        if size > (chunk_size * 2) as u64 && file.seek(SeekFrom::End(-(chunk_size as i64))).is_ok()
+        {
+            let tail_read = file.read(&mut buffer).unwrap_or(0);
+            if tail_read > 0 {
+                hasher.update(&buffer[..tail_read]);
             }
         }
     }
@@ -190,9 +189,13 @@ pub fn materialize_assets(
             if is_image(&content_type) {
                 match materialize_image_variants(config, asset) {
                     Ok(Some(image)) => {
-                        records.extend(image.records);
-                        media.images.insert(asset.public_url.clone(), image.image);
                         jobs.extend(image.jobs);
+                        if image.ready {
+                            records.extend(image.records);
+                            media.images.insert(asset.public_url.clone(), image.image);
+                        } else {
+                            records.push(copy_original_asset(config, asset)?);
+                        }
                         processed_by_ffmpeg = true;
                     }
                     Ok(None) => {}
@@ -205,9 +208,13 @@ pub fn materialize_assets(
             } else if is_video(&content_type) {
                 match materialize_video_variants(config, asset) {
                     Ok(Some(video)) => {
-                        records.extend(video.records);
-                        media.videos.insert(asset.public_url.clone(), video.video);
                         jobs.extend(video.jobs);
+                        if video.ready {
+                            records.extend(video.records);
+                            media.videos.insert(asset.public_url.clone(), video.video);
+                        } else {
+                            records.push(copy_original_asset(config, asset)?);
+                        }
                         processed_by_ffmpeg = true;
                     }
                     Ok(None) => {}
@@ -255,12 +262,14 @@ struct ImageMaterialization {
     records: Vec<AssetRecord>,
     image: ResponsiveImage,
     jobs: Vec<MediaJob>,
+    ready: bool,
 }
 
 struct VideoMaterialization {
     records: Vec<AssetRecord>,
     video: ProcessedVideo,
     jobs: Vec<MediaJob>,
+    ready: bool,
 }
 
 fn copy_original_asset(config: &AppConfig, asset: &AssetCandidate) -> AppResult<AssetRecord> {
@@ -325,7 +334,7 @@ fn materialize_scaled_image_variants<const N: usize>(
         ];
         args.extend(encoder_args.iter().map(|arg| (*arg).to_string()));
         args.push(destination.to_string_lossy().to_string());
-        
+
         if !generated_is_fresh(&asset.source_path, &destination) {
             jobs.push(MediaJob {
                 source: asset.source_path.to_string_lossy().to_string(),
@@ -333,7 +342,7 @@ fn materialize_scaled_image_variants<const N: usize>(
                 args,
             });
         }
-        
+
         let public_url = public_url_for(&rel_path);
         srcset_parts.push(format!("{public_url} {width}w"));
         records.push(record_for_generated(
@@ -348,6 +357,7 @@ fn materialize_scaled_image_variants<const N: usize>(
         .last()
         .map(|record| record.public_url.clone())
         .unwrap_or_else(|| asset.public_url.clone());
+    let ready = jobs.is_empty();
     Ok(Some(ImageMaterialization {
         records,
         image: ResponsiveImage {
@@ -356,6 +366,7 @@ fn materialize_scaled_image_variants<const N: usize>(
             source_type: content_type.into(),
         },
         jobs,
+        ready,
     }))
 }
 
@@ -414,6 +425,7 @@ fn materialize_video_variants(
         records.push(p.record);
         jobs.extend(p.jobs);
     }
+    let ready = jobs.is_empty();
 
     Ok(Some(VideoMaterialization {
         records,
@@ -423,6 +435,7 @@ fn materialize_video_variants(
             poster_url,
         },
         jobs,
+        ready,
     }))
 }
 
@@ -500,12 +513,7 @@ fn materialize_video_poster_with_format<const N: usize>(
 
     let url = public_url_for(&poster_rel);
     Ok(Some(PosterMaterialization {
-        record: record_for_generated(
-            asset,
-            &poster_rel,
-            &url,
-            content_type,
-        ),
+        record: record_for_generated(asset, &poster_rel, &url, content_type),
         jobs,
     }))
 }
@@ -628,6 +636,7 @@ mod tests {
             admin_username: "admin".into(),
             admin_password: "admin123456".into(),
             watch_enabled: false,
+            turnstile_enabled: false,
             upload_limit_mb: 10,
             turnstile_site_key: String::new(),
             turnstile_secret_key: String::new(),

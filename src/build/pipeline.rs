@@ -21,7 +21,7 @@ use crate::{
 
 use crate::content::assets::MediaJob;
 
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, Default)]
 pub struct BuildProgress {
     pub session_id: u64,
     pub is_running: bool,
@@ -29,19 +29,6 @@ pub struct BuildProgress {
     pub completed_jobs: usize,
     pub current_job: Option<MediaJob>,
     pub last_error: Option<String>,
-}
-
-impl Default for BuildProgress {
-    fn default() -> Self {
-        Self {
-            session_id: 0,
-            is_running: false,
-            total_jobs: 0,
-            completed_jobs: 0,
-            current_job: None,
-            last_error: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -87,10 +74,10 @@ impl BuildService {
             p.is_running = false;
             return;
         }
-        
+
         let progress_ptr = self.progress.clone();
         let new_session_id = rand::random::<u64>();
-        
+
         tokio::spawn(async move {
             {
                 let mut p = progress_ptr.write().await;
@@ -109,7 +96,7 @@ impl BuildService {
 
                 println!("Background processing: {}", job.destination);
                 let success = crate::content::assets::run_ffmpeg(job.args);
-                
+
                 {
                     let mut p = progress_ptr.write().await;
                     if success {
@@ -172,9 +159,17 @@ impl BuildService {
                                 .format("%Y-%m-%d %H:%M")
                                 .to_string()
                         }
-                        Err(_) => source.front_matter.updated.clone().unwrap_or_else(time::now_cst_display),
+                        Err(_) => source
+                            .front_matter
+                            .updated
+                            .clone()
+                            .unwrap_or_else(time::now_cst_display),
                     },
-                    Err(_) => source.front_matter.updated.clone().unwrap_or_else(time::now_cst_display),
+                    Err(_) => source
+                        .front_matter
+                        .updated
+                        .clone()
+                        .unwrap_or_else(time::now_cst_display),
                 }
             };
             // Prepare a clone for created_at before moving updated_at into Note
@@ -219,6 +214,7 @@ impl BuildService {
             self.db.log_build("warn", warning)?;
         }
         let site_assets = materialized_assets.records;
+        let mut media_jobs = materialized_assets.jobs;
         println!("Building site graph...");
         let site_data = build_site_data(notes, broken_links, site_assets.clone(), reason.clone());
         {
@@ -227,6 +223,7 @@ impl BuildService {
         }
         {
             let mut cache = self.cache.lock().await;
+            media_jobs = filter_media_jobs(&self.config, &reason, media_jobs, &mut cache);
             cache.note_hashes = new_hashes;
             cache.save(&cache_path(&self.config))?;
         }
@@ -247,13 +244,41 @@ impl BuildService {
             asset_count: site_assets.len(),
             changed_count,
             reason,
-            media_jobs: materialized_assets.jobs,
+            media_jobs,
         })
     }
 }
 
 fn cache_path(config: &AppConfig) -> std::path::PathBuf {
     config.generated_dir.join("cache/build-cache.json")
+}
+
+fn filter_media_jobs(
+    config: &AppConfig,
+    reason: &str,
+    jobs: Vec<MediaJob>,
+    cache: &mut BuildCache,
+) -> Vec<MediaJob> {
+    let suppress_for_note_save = reason.starts_with("admin save ");
+    let force_retry = reason == "manual rebuild";
+
+    jobs.into_iter()
+        .filter(|job| {
+            let key = media_job_cache_key(config, job);
+            if suppress_for_note_save {
+                return false;
+            }
+            let is_new = cache.media_job_destinations.insert(key);
+            force_retry || is_new
+        })
+        .collect()
+}
+
+fn media_job_cache_key(config: &AppConfig, job: &MediaJob) -> String {
+    std::path::Path::new(&job.destination)
+        .strip_prefix(&config.generated_assets_dir)
+        .map(|path| path.to_string_lossy().replace('\\', "/"))
+        .unwrap_or_else(|_| job.destination.clone())
 }
 
 fn asset_record_from_candidate(asset: &AssetCandidate) -> AssetRecord {

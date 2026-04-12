@@ -564,7 +564,7 @@ impl AppDatabase {
         let conn = self.conn.lock().expect("db mutex poisoned");
         // 后缀匹配模式: 匹配所有以该文件名结尾的记录
         let suffix_pattern = format!("%{}", filename);
-        
+
         let mut stmt = conn.prepare(
             r#"
             SELECT id, username, note_slug, video_src, time_ms, body, color, created_at
@@ -574,8 +574,11 @@ impl AppDatabase {
             ORDER BY (video_src = ?2) DESC, time_ms ASC, id ASC
             "#,
         )?;
-        
-        let rows = stmt.query_map(params![note_slug, full_src, suffix_pattern], video_danmaku_from_row)?;
+
+        let rows = stmt.query_map(
+            params![note_slug, full_src, suffix_pattern],
+            video_danmaku_from_row,
+        )?;
         Ok(rows.filter_map(Result::ok).collect())
     }
 

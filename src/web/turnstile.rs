@@ -1,6 +1,6 @@
-use std::sync::LazyLock;
-use serde::Deserialize;
 use crate::config::AppConfig;
+use serde::Deserialize;
+use std::sync::LazyLock;
 
 static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
 
