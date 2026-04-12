@@ -19,18 +19,43 @@ use crate::{
     time,
 };
 
+use crate::content::assets::MediaJob;
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct BuildProgress {
+    pub is_running: bool,
+    pub total_jobs: usize,
+    pub completed_jobs: usize,
+    pub current_job: Option<MediaJob>,
+    pub last_error: Option<String>,
+}
+
+impl Default for BuildProgress {
+    fn default() -> Self {
+        Self {
+            is_running: false,
+            total_jobs: 0,
+            completed_jobs: 0,
+            current_job: None,
+            last_error: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct BuildSummary {
     pub note_count: usize,
     pub asset_count: usize,
     pub changed_count: usize,
     pub reason: String,
+    pub media_jobs: Vec<MediaJob>,
 }
 
 pub struct BuildService {
     config: AppConfig,
     db: Arc<AppDatabase>,
     pub site: Arc<RwLock<SiteData>>,
+    pub progress: Arc<RwLock<BuildProgress>>,
     cache: Mutex<BuildCache>,
     build_lock: Mutex<()>,
 }
@@ -47,9 +72,50 @@ impl BuildService {
             config,
             db,
             site,
+            progress: Arc::new(RwLock::new(BuildProgress::default())),
             cache: Mutex::new(cache),
             build_lock: Mutex::new(()),
         })
+    }
+
+    pub async fn spawn_media_worker(self: Arc<Self>, jobs: Vec<MediaJob>) {
+        let progress_ptr = self.progress.clone();
+        
+        tokio::spawn(async move {
+            {
+                let mut p = progress_ptr.write().await;
+                p.is_running = true;
+                p.total_jobs = jobs.len();
+                p.completed_jobs = 0;
+                p.last_error = None;
+            }
+
+            for job in jobs {
+                {
+                    let mut p = progress_ptr.write().await;
+                    p.current_job = Some(job.clone());
+                }
+
+                println!("Background processing: {}", job.destination);
+                let success = crate::content::assets::run_ffmpeg(job.args);
+                
+                {
+                    let mut p = progress_ptr.write().await;
+                    if success {
+                        p.completed_jobs += 1;
+                    } else {
+                        p.last_error = Some(format!("Failed to process {}", job.destination));
+                    }
+                }
+            }
+
+            {
+                let mut p = progress_ptr.write().await;
+                p.is_running = false;
+                p.current_job = None;
+            }
+            println!("Background media processing complete.");
+        });
     }
 
     pub async fn rebuild(&self, reason: impl Into<String>) -> AppResult<BuildSummary> {
@@ -170,6 +236,7 @@ impl BuildService {
             asset_count: site_assets.len(),
             changed_count,
             reason,
+            media_jobs: materialized_assets.jobs,
         })
     }
 }

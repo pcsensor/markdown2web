@@ -33,7 +33,15 @@ impl AppState {
         filesystem::ensure_sample_content(&config)?;
         let site = Arc::new(RwLock::new(SiteData::default()));
         let build_service = Arc::new(BuildService::new(config.clone(), db.clone(), site.clone())?);
-        build_service.rebuild("startup").await?;
+        
+        let summary = build_service.rebuild("startup").await?;
+        
+        // 启动后台媒体处理任务
+        if !summary.media_jobs.is_empty() {
+            let service_clone = build_service.clone();
+            service_clone.spawn_media_worker(summary.media_jobs).await;
+        }
+
         Ok(Self {
             config,
             db,
@@ -111,6 +119,7 @@ pub fn build_router(state: AppState) -> Router {
             post(admin::upload_asset).layer(DefaultBodyLimit::max(upload_limit_bytes)),
         )
         .route("/admin/rebuild", post(admin::rebuild_site))
+        .route("/admin/build-progress", get(admin::get_build_progress))
         .nest_service("/static", static_service)
         .nest_service("/assets", assets_service)
         .with_state(state)

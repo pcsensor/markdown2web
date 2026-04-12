@@ -2,7 +2,7 @@ use std::fs;
 
 use askama::Template;
 use axum::{
-    Form,
+    Form, Json,
     extract::{Multipart, Path, Query, State},
     response::{Html, IntoResponse, Redirect, Response},
 };
@@ -539,10 +539,13 @@ pub async fn save_note(
     };
     let contents = compose_markdown(&front_matter, &form.body)?;
     filesystem::write_note(&state.config, &slug, &contents)?;
-    state
+    let summary = state
         .build_service
         .rebuild(format!("admin save {}", slug))
         .await?;
+    if !summary.media_jobs.is_empty() {
+        state.build_service.clone().spawn_media_worker(summary.media_jobs).await;
+    }
     Ok(Redirect::to("/admin").into_response())
 }
 
@@ -580,7 +583,10 @@ pub async fn upload_markdown(
             std::str::from_utf8(&bytes).map_err(AppError::internal)?,
         )?;
     }
-    state.build_service.rebuild("markdown upload").await?;
+    let summary = state.build_service.rebuild("markdown upload").await?;
+    if !summary.media_jobs.is_empty() {
+        state.build_service.clone().spawn_media_worker(summary.media_jobs).await;
+    }
     Ok(Redirect::to("/admin").into_response())
 }
 
@@ -610,7 +616,10 @@ pub async fn upload_asset(
         }
         filesystem::write_asset(&state.config, &filename, &bytes)?;
     }
-    state.build_service.rebuild("asset upload").await?;
+    let summary = state.build_service.rebuild("asset upload").await?;
+    if !summary.media_jobs.is_empty() {
+        state.build_service.clone().spawn_media_worker(summary.media_jobs).await;
+    }
     Ok(Redirect::to("/admin").into_response())
 }
 
@@ -618,7 +627,10 @@ pub async fn rebuild_site(State(state): State<AppState>, jar: CookieJar) -> AppR
     let Some(_user) = auth::current_user(&jar, &state)? else {
         return Ok(Redirect::to("/admin/login").into_response());
     };
-    state.build_service.rebuild("manual rebuild").await?;
+    let summary = state.build_service.rebuild("manual rebuild").await?;
+    if !summary.media_jobs.is_empty() {
+        state.build_service.clone().spawn_media_worker(summary.media_jobs).await;
+    }
     Ok(Redirect::to("/admin").into_response())
 }
 
@@ -641,6 +653,17 @@ fn allowed_asset_filename(filename: &str) -> bool {
         ext.as_str(),
         "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "mp3" | "mp4" | "pdf" | "txt" | "zip"
     )
+}
+
+pub async fn get_build_progress(
+    State(state): State<AppState>,
+    jar: CookieJar,
+) -> AppResult<Json<crate::build::pipeline::BuildProgress>> {
+    let Some(_user) = auth::current_user(&jar, &state)? else {
+        return Err(AppError::Unauthorized);
+    };
+    let progress = state.build_service.progress.read().await;
+    Ok(Json(progress.clone()))
 }
 
 fn multipart_upload_error(error: impl std::fmt::Display) -> AppError {

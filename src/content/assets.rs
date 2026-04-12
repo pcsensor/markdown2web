@@ -22,11 +22,19 @@ pub struct AssetCandidate {
     pub output_rel_path: PathBuf,
 }
 
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct MediaJob {
+    pub source: String,
+    pub destination: String,
+    pub args: Vec<String>,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct MaterializedAssets {
     pub records: Vec<AssetRecord>,
     pub media: MediaManifest,
     pub warnings: Vec<String>,
+    pub jobs: Vec<MediaJob>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -149,6 +157,7 @@ pub fn materialize_assets(
     let mut records = Vec::new();
     let mut media = MediaManifest::default();
     let mut warnings = Vec::new();
+    let mut jobs = Vec::new();
     let ffmpeg_available = command_available("ffmpeg");
 
     for asset in assets {
@@ -164,6 +173,7 @@ pub fn materialize_assets(
                     Ok(Some(image)) => {
                         records.extend(image.records);
                         media.images.insert(asset.public_url.clone(), image.image);
+                        jobs.extend(image.jobs);
                         processed_by_ffmpeg = true;
                     }
                     Ok(None) => {}
@@ -178,6 +188,7 @@ pub fn materialize_assets(
                     Ok(Some(video)) => {
                         records.extend(video.records);
                         media.videos.insert(asset.public_url.clone(), video.video);
+                        jobs.extend(video.jobs);
                         processed_by_ffmpeg = true;
                     }
                     Ok(None) => {}
@@ -206,6 +217,7 @@ pub fn materialize_assets(
         records,
         media,
         warnings,
+        jobs,
     })
 }
 
@@ -223,11 +235,13 @@ pub fn apply_media_optimizations(html: &str, manifest: &MediaManifest) -> String
 struct ImageMaterialization {
     records: Vec<AssetRecord>,
     image: ResponsiveImage,
+    jobs: Vec<MediaJob>,
 }
 
 struct VideoMaterialization {
     records: Vec<AssetRecord>,
     video: ProcessedVideo,
+    jobs: Vec<MediaJob>,
 }
 
 fn copy_original_asset(config: &AppConfig, asset: &AssetCandidate) -> AppResult<AssetRecord> {
@@ -273,6 +287,7 @@ fn materialize_scaled_image_variants<const N: usize>(
     let widths = [480_u32, 960, 1440];
     let mut records = Vec::new();
     let mut srcset_parts = Vec::new();
+    let mut jobs = Vec::new();
     let base = output_stem(asset)?;
 
     for width in widths {
@@ -291,10 +306,15 @@ fn materialize_scaled_image_variants<const N: usize>(
         ];
         args.extend(encoder_args.iter().map(|arg| (*arg).to_string()));
         args.push(destination.to_string_lossy().to_string());
-        let ok = generated_is_fresh(&asset.source_path, &destination) || run_ffmpeg(args);
-        if !ok {
-            return Ok(None);
+        
+        if !generated_is_fresh(&asset.source_path, &destination) {
+            jobs.push(MediaJob {
+                source: asset.source_path.to_string_lossy().to_string(),
+                destination: destination.to_string_lossy().to_string(),
+                args,
+            });
         }
+        
         let public_url = public_url_for(&rel_path);
         srcset_parts.push(format!("{public_url} {width}w"));
         records.push(record_for_generated(
@@ -316,6 +336,7 @@ fn materialize_scaled_image_variants<const N: usize>(
             srcset: srcset_parts.join(", "),
             source_type: content_type.into(),
         },
+        jobs,
     }))
 }
 
@@ -330,29 +351,34 @@ fn materialize_video_variants(
         fs::create_dir_all(parent)?;
     }
 
-    let ok = generated_is_fresh(&asset.source_path, &video_destination)
-        || run_ffmpeg(vec![
-            "-y".into(),
-            "-i".into(),
-            asset.source_path.to_string_lossy().to_string(),
-            "-vf".into(),
-            "scale='min(1280,iw)':-2".into(),
-            "-c:v".into(),
-            "libx264".into(),
-            "-preset".into(),
-            "veryfast".into(),
-            "-crf".into(),
-            "28".into(),
-            "-c:a".into(),
-            "aac".into(),
-            "-b:a".into(),
-            "96k".into(),
-            "-movflags".into(),
-            "+faststart".into(),
-            video_destination.to_string_lossy().to_string(),
-        ]);
-    if !ok {
-        return Ok(None);
+    let mut jobs = Vec::new();
+    let args = vec![
+        "-y".into(),
+        "-i".into(),
+        asset.source_path.to_string_lossy().to_string(),
+        "-vf".into(),
+        "scale='min(1280,iw)':-2".into(),
+        "-c:v".into(),
+        "libx264".into(),
+        "-preset".into(),
+        "veryfast".into(),
+        "-crf".into(),
+        "28".into(),
+        "-c:a".into(),
+        "aac".into(),
+        "-b:a".into(),
+        "96k".into(),
+        "-movflags".into(),
+        "+faststart".into(),
+        video_destination.to_string_lossy().to_string(),
+    ];
+
+    if !generated_is_fresh(&asset.source_path, &video_destination) {
+        jobs.push(MediaJob {
+            source: asset.source_path.to_string_lossy().to_string(),
+            destination: video_destination.to_string_lossy().to_string(),
+            args,
+        });
     }
 
     let video_url = public_url_for(&video_rel);
@@ -364,9 +390,10 @@ fn materialize_video_variants(
     )];
 
     let poster = materialize_video_poster(config, asset, &base)?;
-    let poster_url = poster.as_ref().map(|record| record.public_url.clone());
-    if let Some(record) = poster {
-        records.push(record);
+    let poster_url = poster.as_ref().map(|p| p.record.public_url.clone());
+    if let Some(p) = poster {
+        records.push(p.record);
+        jobs.extend(p.jobs);
     }
 
     Ok(Some(VideoMaterialization {
@@ -376,6 +403,7 @@ fn materialize_video_variants(
             video_type: "video/mp4".into(),
             poster_url,
         },
+        jobs,
     }))
 }
 
@@ -395,12 +423,17 @@ fn replace_image_html(html: &str, original_url: &str, image: &ResponsiveImage) -
     .to_string()
 }
 
+struct PosterMaterialization {
+    record: AssetRecord,
+    jobs: Vec<MediaJob>,
+}
+
 fn materialize_video_poster(
     config: &AppConfig,
     asset: &AssetCandidate,
     base: &str,
-) -> AppResult<Option<AssetRecord>> {
-    if let Some(record) = materialize_video_poster_with_format(
+) -> AppResult<Option<PosterMaterialization>> {
+    if let Some(p) = materialize_video_poster_with_format(
         config,
         asset,
         base,
@@ -408,7 +441,7 @@ fn materialize_video_poster(
         "image/webp",
         ["-quality", "80"],
     )? {
-        return Ok(Some(record));
+        return Ok(Some(p));
     }
     materialize_video_poster_with_format(config, asset, base, "jpg", "image/jpeg", ["-q:v", "5"])
 }
@@ -420,7 +453,7 @@ fn materialize_video_poster_with_format<const N: usize>(
     extension: &str,
     content_type: &str,
     encoder_args: [&str; N],
-) -> AppResult<Option<AssetRecord>> {
+) -> AppResult<Option<PosterMaterialization>> {
     let poster_rel = PathBuf::from(format!("{base}-poster.{extension}"));
     let poster_destination = config.generated_assets_dir.join(&poster_rel);
     let mut args = vec![
@@ -437,17 +470,25 @@ fn materialize_video_poster_with_format<const N: usize>(
     args.extend(encoder_args.iter().map(|arg| (*arg).to_string()));
     args.push(poster_destination.to_string_lossy().to_string());
 
-    let poster_ok = generated_is_fresh(&asset.source_path, &poster_destination) || run_ffmpeg(args);
-    if !poster_ok {
-        return Ok(None);
+    let mut jobs = Vec::new();
+    if !generated_is_fresh(&asset.source_path, &poster_destination) {
+        jobs.push(MediaJob {
+            source: asset.source_path.to_string_lossy().to_string(),
+            destination: poster_destination.to_string_lossy().to_string(),
+            args,
+        });
     }
+
     let url = public_url_for(&poster_rel);
-    Ok(Some(record_for_generated(
-        asset,
-        &poster_rel,
-        &url,
-        content_type,
-    )))
+    Ok(Some(PosterMaterialization {
+        record: record_for_generated(
+            asset,
+            &poster_rel,
+            &url,
+            content_type,
+        ),
+        jobs,
+    }))
 }
 
 fn replace_video_html(html: &str, original_url: &str, video: &ProcessedVideo) -> String {
@@ -529,7 +570,7 @@ fn generated_is_fresh(source: &Path, destination: &Path) -> bool {
     destination_modified >= source_modified
 }
 
-fn run_ffmpeg(args: Vec<String>) -> bool {
+pub fn run_ffmpeg(args: Vec<String>) -> bool {
     Command::new("ffmpeg")
         .args(args)
         .stdout(Stdio::null())
