@@ -561,15 +561,17 @@ impl AppDatabase {
         video_src: &str,
     ) -> AppResult<Vec<VideoDanmaku>> {
         let conn = self.conn.lock().expect("db mutex poisoned");
+        // 使用 LIKE 进行模糊匹配，以便找回包含旧哈希前缀的记录
+        let pattern = format!("%{}%", video_src);
         let mut stmt = conn.prepare(
             r#"
             SELECT id, username, note_slug, video_src, time_ms, body, color, created_at
             FROM video_danmaku
-            WHERE note_slug = ?1 AND video_src = ?2
+            WHERE note_slug = ?1 AND video_src LIKE ?2
             ORDER BY time_ms ASC, id ASC
             "#,
         )?;
-        let rows = stmt.query_map(params![note_slug, video_src], video_danmaku_from_row)?;
+        let rows = stmt.query_map(params![note_slug, pattern], video_danmaku_from_row)?;
         Ok(rows.filter_map(Result::ok).collect())
     }
 

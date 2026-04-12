@@ -488,16 +488,31 @@ fn normalize_video_src(value: String) -> AppResult<String> {
     if value.is_empty() || value.len() > 512 {
         return Err(AppError::BadRequest("video source is invalid".into()));
     }
-    let asset_part = value
+    
+    // 1. 移除可能存在的锚点参数 (如 #0)
+    let asset_path = value
         .split_once('#')
-        .map(|(asset, _)| asset)
+        .map(|(path, _)| path)
         .unwrap_or(value);
-    if !asset_part.starts_with("/assets/") {
+
+    // 2. 验证是否为资源目录
+    if !asset_path.starts_with("/assets/") {
         return Err(AppError::BadRequest(
             "video source must be a site asset".into(),
         ));
     }
-    Ok(value.into())
+
+    // 3. 获取文件名并尝试移除哈希前缀 (格式: 12位哈希-文件名)
+    let filename = asset_path.strip_prefix("/assets/").unwrap_or(asset_path);
+    
+    // 如果文件名形如 "f9391142153c-love.mp4"，提取 "-" 之后的部分
+    let normalized = if filename.len() > 13 && filename.as_bytes()[12] == b'-' {
+        &filename[13..]
+    } else {
+        filename
+    };
+
+    Ok(normalized.to_string())
 }
 
 fn normalize_danmaku_body(value: String) -> AppResult<String> {
