@@ -1943,8 +1943,7 @@ button.secondary, .button.secondary {
   font-size: clamp(10px, 2.2cqw, 15px);
 }
 .video-player.is-controls-visible .video-player-ui,
-.video-player:not(.is-playing) .video-player-ui,
-.video-player:focus-within .video-player-ui {
+.video-player:not(.is-playing) .video-player-ui {
   opacity: 1;
   transform: translateY(0);
 }

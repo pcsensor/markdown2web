@@ -1527,12 +1527,19 @@ function wireVideoPlayers() {
     const showControls = (sticky = false) => {
       container.classList.add('is-controls-visible');
       window.clearTimeout(controlsTimer);
+      
+      // 如果视频正在播放且不是强制常驻模式，开启自动隐藏定时器
       if (!sticky && !video.paused && !video.ended) {
         controlsTimer = window.setTimeout(() => {
-          if (!container.matches(':focus-within')) {
+          // 只有当用户正在输入（焦点在 input/textarea）时，才不隐藏
+          const activeEl = document.activeElement;
+          const isTyping = activeEl && container.contains(activeEl) && 
+                          (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
+          
+          if (!isTyping) {
             container.classList.remove('is-controls-visible');
           }
-        }, 2200);
+        }, 2500);
       }
     };
 
@@ -1695,7 +1702,9 @@ function wireVideoPlayers() {
       await target.requestFullscreen?.().catch(() => {});
     });
 
-    container.addEventListener('pointermove', () => showControls());
+    container.addEventListener('pointermove', () => {
+      showControls();
+    });
     container.addEventListener('pointerleave', () => {
       if (!video.paused && !video.ended) {
         window.clearTimeout(controlsTimer);
