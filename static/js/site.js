@@ -1613,6 +1613,8 @@ function wireVideoPlayers() {
 
     loadButton?.addEventListener('click', () => {
       loadVideo(true);
+      // 点击播放后自动聚焦到容器，以便立即使用键盘控制
+      container.focus();
     });
 
     toggleButton?.addEventListener('click', async () => {
