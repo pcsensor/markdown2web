@@ -384,11 +384,10 @@ pub async fn delete_annotation(
 pub async fn list_danmaku(
     Path(slug): Path<String>,
     State(state): State<AppState>,
-    jar: CookieJar,
+    _jar: CookieJar,
     Query(query): Query<DanmakuQuery>,
 ) -> AppResult<Json<DanmakuListResponse>> {
     ensure_published_note(&state, &slug).await?;
-    auth::current_viewer(&jar, &state)?.ok_or(AppError::Unauthorized)?;
     let video_src = normalize_video_src(query.video_src)?;
     Ok(Json(DanmakuListResponse {
         danmaku: state.db.list_video_danmaku(&slug, &video_src)?,

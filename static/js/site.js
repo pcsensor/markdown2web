@@ -1557,7 +1557,7 @@ function wireVideoPlayers() {
     };
 
     const syncDanmaku = (forceBaseline = false) => {
-      if (!danmakuEnabled || !danmakuState.loaded) return;
+      if (!danmakuState.loaded) return;
       const currentMs = Math.floor(video.currentTime * 1000);
       if (forceBaseline || danmakuState.seeking || Math.abs(currentMs - danmakuState.lastTimeMs) > 1800) {
         danmakuState.shown.clear();
@@ -1578,7 +1578,8 @@ function wireVideoPlayers() {
     };
 
     const loadDanmaku = async () => {
-      if (!danmakuEnabled || danmakuState.loaded || !noteSlug || !videoKey) return;
+      // 移除 danmakuEnabled 限制，让所有人都能加载并看到弹幕
+      if (danmakuState.loaded || !noteSlug || !videoKey) return;
       const params = new URLSearchParams({ video_src: videoKey });
       const response = await fetch(`/api/notes/${encodeURIComponent(noteSlug)}/danmaku?${params}`, {
         headers: { Accept: 'application/json' },
@@ -1597,11 +1598,13 @@ function wireVideoPlayers() {
       }
       container.classList.add('is-loaded');
       showControls(!autoplay);
+      
+      // 即使不自动播放，也应该尝试加载弹幕，以便用户点击播放时能看到
+      await loadDanmaku();
+
       if (!autoplay) return;
       try {
         await video.play();
-        await loadDanmaku();
-        showControls();
         updateControls();
       } catch (error) {
         console.warn('Video playback failed', error);
