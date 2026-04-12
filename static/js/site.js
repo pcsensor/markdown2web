@@ -348,6 +348,7 @@ function wireNoteAnnotations() {
   const viewerUsername = article.dataset.viewerUsername || '';
   const isAdmin = article.dataset.isAdmin === 'true';
   const enabled = article.dataset.annotationEnabled === 'true';
+  const csrfToken = article.dataset.csrfToken || '';
   const highlightButton = toolbar.querySelector('[data-annotation-highlight]');
   const commentButton = toolbar.querySelector('[data-annotation-comment]');
   const deleteCommentButton = toolbar.querySelector('[data-annotation-delete-comment]');
@@ -769,6 +770,7 @@ const updateToolbarState = () => {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
+        'X-CSRF-Token': csrfToken,
       },
       body: JSON.stringify(payload),
     });
@@ -788,7 +790,7 @@ const updateToolbarState = () => {
   const deleteAnnotation = async (annotationId) => {
     const response = await fetch(`/api/annotations/${annotationId}`, {
       method: 'DELETE',
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', 'X-CSRF-Token': csrfToken },
     });
     if (response.status === 401) {
       window.location.href = accountUrl;
@@ -1820,6 +1822,7 @@ function wireVideoPlayers() {
         headers: {
           'Content-Type': 'application/json',
           Accept: 'application/json',
+          'X-CSRF-Token': csrfToken,
         },
         body: JSON.stringify(payload),
       });

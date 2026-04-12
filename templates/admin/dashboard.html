@@ -13,8 +13,14 @@
   <div class="admin-actions">
     <a class="button secondary" href="/admin/notes/new">✦ 新建笔记</a>
     <a class="button secondary" href="/admin/users">👥 用户管理（{{ public_user_count }}）</a>
-    <form action="/admin/rebuild" method="post"><button type="submit">↻ 手动重建</button></form>
-    <form action="/admin/logout" method="post"><button class="secondary" type="submit">⇠ 退出</button></form>
+    <form action="/admin/rebuild" method="post">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
+      <button type="submit">↻ 手动重建</button>
+    </form>
+    <form action="/admin/logout" method="post">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
+      <button class="secondary" type="submit">⇠ 退出</button>
+    </form>
   </div>
 </section>
 
@@ -42,6 +48,7 @@
       <span class="panel-chip">notes</span>
     </div>
     <form id="upload-markdown-form" action="/admin/upload/markdown" method="post" enctype="multipart/form-data" class="stack-form">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
       <input type="file" name="file" accept=".md,.markdown" required />
       <button type="submit">上传文件</button>
       <div id="markdown-progress-container" class="upload-progress-container" style="display: none;">
@@ -56,7 +63,8 @@
       <span class="panel-chip">assets</span>
     </div>
     <form id="upload-asset-form" action="/admin/upload/asset" method="post" enctype="multipart/form-data" class="stack-form">
-      <input type="file" name="file" accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.mp3,.mp4,.pdf,.txt,.zip" required />
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
+      <input type="file" name="file" accept=".png,.jpg,.jpeg,.gif,.webp,.mp3,.mp4,.pdf,.txt,.zip" required />
       <button type="submit">上传资源</button>
       <div id="asset-progress-container" class="upload-progress-container" style="display: none;">
         <div class="upload-progress-bar-bg">
@@ -76,6 +84,7 @@
       {% when None %}
       {% endmatch %}
     <form action="/admin/password" method="post" class="stack-form">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
       <label>当前密码<input type="password" name="current_password" autocomplete="current-password" required /></label>
       <label>新密码<input type="password" name="new_password" minlength="8" autocomplete="new-password" required /></label>
       <label>确认新密码<input type="password" name="confirm_password" minlength="8" autocomplete="new-password" required /></label>

@@ -4,6 +4,7 @@ use askama::Template;
 use axum::{
     Form, Json,
     extract::{Multipart, Path, Query, State},
+    http::HeaderMap,
     response::{Html, IntoResponse, Redirect, Response},
 };
 use axum_extra::extract::cookie::CookieJar;
@@ -21,7 +22,7 @@ use crate::{
         filesystem,
         sqlite::{BuildEvent, ManagedPublicUser},
     },
-    web::{auth, turnstile},
+    web::{auth, csrf, rate_limit, turnstile},
 };
 
 #[derive(Template)]
@@ -33,6 +34,7 @@ struct LoginTemplate {
     success: Option<String>,
     turnstile_enabled: bool,
     turnstile_site_key: String,
+    csrf_token: String,
 }
 
 #[derive(Template)]
@@ -44,6 +46,7 @@ struct DashboardTemplate {
     build_events: Vec<BuildEvent>,
     password_error: Option<String>,
     public_user_count: usize,
+    csrf_token: String,
 }
 
 #[derive(Template)]
@@ -53,6 +56,7 @@ struct NoteEditTemplate {
     username: String,
     mode: String,
     note: EditableNote,
+    csrf_token: String,
 }
 
 #[derive(Template)]
@@ -64,6 +68,7 @@ struct UsersTemplate {
     create_username: String,
     create_error: Option<String>,
     success: Option<String>,
+    csrf_token: String,
 }
 
 #[derive(Template)]
@@ -74,6 +79,7 @@ struct UserEditTemplate {
     form_username: String,
     update_error: Option<String>,
     success: Option<String>,
+    csrf_token: String,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -94,6 +100,9 @@ pub struct LoginForm {
     username: String,
     password: String,
     #[serde(default)]
+    #[serde(rename = "_csrf")]
+    csrf_token: String,
+    #[serde(default)]
     #[serde(rename = "cf-turnstile-response")]
     cf_turnstile_response: Option<String>,
 }
@@ -109,6 +118,9 @@ pub struct SaveNoteForm {
     updated: Option<String>,
     aliases: Option<String>,
     body: String,
+    #[serde(default)]
+    #[serde(rename = "_csrf")]
+    csrf_token: String,
 }
 
 #[derive(Default, Deserialize)]
@@ -121,6 +133,9 @@ pub struct ChangePasswordForm {
     current_password: String,
     new_password: String,
     confirm_password: String,
+    #[serde(default)]
+    #[serde(rename = "_csrf")]
+    csrf_token: String,
 }
 
 #[derive(Default, Deserialize)]
@@ -133,6 +148,9 @@ pub struct CreatePublicUserForm {
     username: String,
     password: String,
     confirm_password: String,
+    #[serde(default)]
+    #[serde(rename = "_csrf")]
+    csrf_token: String,
 }
 
 #[derive(Deserialize)]
@@ -140,6 +158,16 @@ pub struct UpdatePublicUserForm {
     username: String,
     new_password: String,
     confirm_password: String,
+    #[serde(default)]
+    #[serde(rename = "_csrf")]
+    csrf_token: String,
+}
+
+#[derive(Deserialize)]
+pub struct CsrfForm {
+    #[serde(default)]
+    #[serde(rename = "_csrf")]
+    csrf_token: String,
 }
 
 pub async fn login_page(
@@ -150,7 +178,8 @@ pub async fn login_page(
     if auth::current_user(&jar, &state)?.is_some() {
         return Ok(Redirect::to("/admin").into_response());
     }
-    render(LoginTemplate {
+    let csrf_token = csrf::generate_token();
+    let response = render(LoginTemplate {
         site_name: state.config.site_name.clone(),
         username: state.config.admin_username.clone(),
         error: None,
@@ -160,14 +189,30 @@ pub async fn login_page(
         },
         turnstile_enabled: state.config.turnstile_enabled,
         turnstile_site_key: state.config.turnstile_site_key.clone(),
-    })
+        csrf_token: csrf_token.clone(),
+    })?;
+    Ok((
+        jar.add(csrf::build_pre_auth_cookie(csrf_token, &state.config)),
+        response,
+    )
+        .into_response())
 }
 
 pub async fn login(
     State(state): State<AppState>,
     jar: CookieJar,
+    headers: HeaderMap,
     Form(form): Form<LoginForm>,
 ) -> AppResult<Response> {
+    csrf::verify_pre_auth(&jar, &form.csrf_token)?;
+    rate_limit::check(
+        &state,
+        "admin-login",
+        &form.username,
+        &headers,
+        rate_limit::LOGIN_LIMIT,
+        rate_limit::LOGIN_WINDOW_SECS,
+    )?;
     let token = form.cf_turnstile_response.as_deref().unwrap_or_default();
     match turnstile::verify_turnstile(token, &state.config, None).await {
         Ok(true) => {}
@@ -179,6 +224,7 @@ pub async fn login(
                 success: None,
                 turnstile_enabled: state.config.turnstile_enabled,
                 turnstile_site_key: state.config.turnstile_site_key.clone(),
+                csrf_token: form.csrf_token,
             });
         }
         Err(err) => {
@@ -189,6 +235,7 @@ pub async fn login(
                 success: None,
                 turnstile_enabled: state.config.turnstile_enabled,
                 turnstile_site_key: state.config.turnstile_site_key.clone(),
+                csrf_token: form.csrf_token,
             });
         }
     }
@@ -201,17 +248,29 @@ pub async fn login(
             success: None,
             turnstile_enabled: state.config.turnstile_enabled,
             turnstile_site_key: state.config.turnstile_site_key.clone(),
+            csrf_token: form.csrf_token,
         });
     }
-    let token = state.db.create_session(&form.username)?;
+    let session = state
+        .db
+        .create_session(&form.username, state.config.session_ttl_hours)?;
     Ok((
-        jar.add(auth::build_session_cookie(token)),
+        jar.remove(csrf::clear_pre_auth_cookie())
+            .add(auth::build_session_cookie(session.token, &state.config)),
         Redirect::to("/admin"),
     )
         .into_response())
 }
 
-pub async fn logout(State(state): State<AppState>, jar: CookieJar) -> AppResult<Response> {
+pub async fn logout(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Form(form): Form<CsrfForm>,
+) -> AppResult<Response> {
+    let Some(session) = auth::current_admin_session(&jar, &state)? else {
+        return Ok(Redirect::to("/admin/login").into_response());
+    };
+    csrf::verify_form(&session.csrf_token, &form.csrf_token)?;
     if let Some(token) = auth::session_token(&jar) {
         let _ = state.db.delete_session(&token);
     }
@@ -223,10 +282,10 @@ pub async fn logout(State(state): State<AppState>, jar: CookieJar) -> AppResult<
 }
 
 pub async fn dashboard(State(state): State<AppState>, jar: CookieJar) -> AppResult<Response> {
-    let Some(user) = auth::current_user(&jar, &state)? else {
+    let Some(session) = auth::current_admin_session(&jar, &state)? else {
         return Ok(Redirect::to("/admin/login").into_response());
     };
-    dashboard_response(&state, user, None).await
+    dashboard_response(&state, session.username, session.csrf_token, None).await
 }
 
 pub async fn change_password(
@@ -236,28 +295,44 @@ pub async fn change_password(
 ) -> AppResult<Response> {
     const MIN_PASSWORD_LENGTH: usize = 8;
 
-    let Some(user) = auth::current_user(&jar, &state)? else {
+    let Some(session) = auth::current_admin_session(&jar, &state)? else {
         return Ok(Redirect::to("/admin/login").into_response());
     };
+    csrf::verify_form(&session.csrf_token, &form.csrf_token)?;
+    let user = session.username;
+    let csrf_token = session.csrf_token;
     if !state.db.verify_user(&user, &form.current_password)? {
-        return dashboard_response(&state, user, Some("当前密码不正确。".into())).await;
+        return dashboard_response(&state, user, csrf_token, Some("当前密码不正确。".into())).await;
     }
     if form.new_password.trim().is_empty() {
-        return dashboard_response(&state, user, Some("新密码不能为空。".into())).await;
+        return dashboard_response(&state, user, csrf_token, Some("新密码不能为空。".into())).await;
     }
     if form.new_password.len() < MIN_PASSWORD_LENGTH {
         return dashboard_response(
             &state,
             user,
+            csrf_token,
             Some(format!("新密码至少需要 {MIN_PASSWORD_LENGTH} 个字符。")),
         )
         .await;
     }
     if form.new_password != form.confirm_password {
-        return dashboard_response(&state, user, Some("两次输入的新密码不一致。".into())).await;
+        return dashboard_response(
+            &state,
+            user,
+            csrf_token,
+            Some("两次输入的新密码不一致。".into()),
+        )
+        .await;
     }
     if form.new_password == form.current_password {
-        return dashboard_response(&state, user, Some("新密码不能与当前密码相同。".into())).await;
+        return dashboard_response(
+            &state,
+            user,
+            csrf_token,
+            Some("新密码不能与当前密码相同。".into()),
+        )
+        .await;
     }
     if !state.db.update_password(&user, &form.new_password)? {
         return Err(AppError::Unauthorized);
@@ -275,12 +350,13 @@ pub async fn users_page(
     jar: CookieJar,
     Query(query): Query<UserManagementStatusQuery>,
 ) -> AppResult<Response> {
-    let Some(user) = auth::current_user(&jar, &state)? else {
+    let Some(session) = auth::current_admin_session(&jar, &state)? else {
         return Ok(Redirect::to("/admin/login").into_response());
     };
     users_response(
         &state,
-        user,
+        session.username,
+        session.csrf_token,
         String::new(),
         None,
         users_success_message(query.status.as_deref()),
@@ -295,15 +371,19 @@ pub async fn create_public_user(
 ) -> AppResult<Response> {
     const MIN_PASSWORD_LENGTH: usize = 8;
 
-    let Some(user) = auth::current_user(&jar, &state)? else {
+    let Some(session) = auth::current_admin_session(&jar, &state)? else {
         return Ok(Redirect::to("/admin/login").into_response());
     };
+    csrf::verify_form(&session.csrf_token, &form.csrf_token)?;
+    let user = session.username;
+    let csrf_token = session.csrf_token;
 
     let username = form.username.trim().to_string();
     if username.is_empty() {
         return users_response(
             &state,
             user,
+            csrf_token,
             username,
             Some("用户名不能为空。".into()),
             None,
@@ -314,6 +394,7 @@ pub async fn create_public_user(
         return users_response(
             &state,
             user,
+            csrf_token,
             username,
             Some(format!("密码至少需要 {MIN_PASSWORD_LENGTH} 个字符。")),
             None,
@@ -324,6 +405,7 @@ pub async fn create_public_user(
         return users_response(
             &state,
             user,
+            csrf_token,
             username,
             Some("两次输入的密码不一致。".into()),
             None,
@@ -334,6 +416,7 @@ pub async fn create_public_user(
         return users_response(
             &state,
             user,
+            csrf_token,
             username,
             Some("该用户名已被注册。".into()),
             None,
@@ -355,12 +438,13 @@ pub async fn user_detail_page(
     jar: CookieJar,
     Query(query): Query<UserManagementStatusQuery>,
 ) -> AppResult<Response> {
-    let Some(user) = auth::current_user(&jar, &state)? else {
+    let Some(session) = auth::current_admin_session(&jar, &state)? else {
         return Ok(Redirect::to("/admin/login").into_response());
     };
     user_detail_response(
         &state,
-        user,
+        session.username,
+        session.csrf_token,
         &username,
         username.clone(),
         None,
@@ -377,15 +461,19 @@ pub async fn update_public_user(
 ) -> AppResult<Response> {
     const MIN_PASSWORD_LENGTH: usize = 8;
 
-    let Some(user) = auth::current_user(&jar, &state)? else {
+    let Some(session) = auth::current_admin_session(&jar, &state)? else {
         return Ok(Redirect::to("/admin/login").into_response());
     };
+    csrf::verify_form(&session.csrf_token, &form.csrf_token)?;
+    let user = session.username;
+    let csrf_token = session.csrf_token;
 
     let next_username = form.username.trim().to_string();
     if next_username.is_empty() {
         return user_detail_response(
             &state,
             user,
+            csrf_token,
             &current_username,
             next_username,
             Some("用户名不能为空。".into()),
@@ -401,6 +489,7 @@ pub async fn update_public_user(
             return user_detail_response(
                 &state,
                 user,
+                csrf_token,
                 &current_username,
                 next_username,
                 Some(format!("新密码至少需要 {MIN_PASSWORD_LENGTH} 个字符。")),
@@ -412,6 +501,7 @@ pub async fn update_public_user(
             return user_detail_response(
                 &state,
                 user,
+                csrf_token,
                 &current_username,
                 next_username,
                 Some("两次输入的新密码不一致。".into()),
@@ -426,6 +516,7 @@ pub async fn update_public_user(
         return user_detail_response(
             &state,
             user,
+            csrf_token,
             &current_username,
             next_username,
             Some("请至少修改用户名或重置密码。".into()),
@@ -445,6 +536,7 @@ pub async fn update_public_user(
                 return user_detail_response(
                     &state,
                     user,
+                    csrf_token,
                     &current_username,
                     next_username,
                     Some(message),
@@ -467,10 +559,12 @@ pub async fn delete_public_user(
     Path(username): Path<String>,
     State(state): State<AppState>,
     jar: CookieJar,
+    Form(form): Form<CsrfForm>,
 ) -> AppResult<Response> {
-    let Some(_user) = auth::current_user(&jar, &state)? else {
+    let Some(session) = auth::current_admin_session(&jar, &state)? else {
         return Ok(Redirect::to("/admin/login").into_response());
     };
+    csrf::verify_form(&session.csrf_token, &form.csrf_token)?;
     if !state.db.delete_public_user(&username)? {
         return Err(AppError::NotFound(format!("user {}", username)));
     }
@@ -478,17 +572,18 @@ pub async fn delete_public_user(
 }
 
 pub async fn new_note_page(State(state): State<AppState>, jar: CookieJar) -> AppResult<Response> {
-    let Some(user) = auth::current_user(&jar, &state)? else {
+    let Some(session) = auth::current_admin_session(&jar, &state)? else {
         return Ok(Redirect::to("/admin/login").into_response());
     };
     render(NoteEditTemplate {
         site_name: state.config.site_name.clone(),
-        username: user,
+        username: session.username,
         mode: "Create".into(),
         note: EditableNote {
             status: "published".into(),
             ..Default::default()
         },
+        csrf_token: session.csrf_token,
     })
 }
 
@@ -497,7 +592,7 @@ pub async fn edit_note_page(
     State(state): State<AppState>,
     jar: CookieJar,
 ) -> AppResult<Response> {
-    let Some(user) = auth::current_user(&jar, &state)? else {
+    let Some(session) = auth::current_admin_session(&jar, &state)? else {
         return Ok(Redirect::to("/admin/login").into_response());
     };
     let site = state.site.read().await.clone();
@@ -508,7 +603,7 @@ pub async fn edit_note_page(
     let (front_matter, body) = parse_front_matter(&raw)?;
     render(NoteEditTemplate {
         site_name: state.config.site_name.clone(),
-        username: user,
+        username: session.username,
         mode: "Edit".into(),
         note: EditableNote {
             title: front_matter.title.unwrap_or(note.title),
@@ -521,6 +616,7 @@ pub async fn edit_note_page(
             aliases: front_matter.aliases.join(", "),
             body,
         },
+        csrf_token: session.csrf_token,
     })
 }
 
@@ -529,13 +625,16 @@ pub async fn save_note(
     jar: CookieJar,
     Form(form): Form<SaveNoteForm>,
 ) -> AppResult<Response> {
-    let Some(_user) = auth::current_user(&jar, &state)? else {
+    let Some(session) = auth::current_admin_session(&jar, &state)? else {
         return Ok(Redirect::to("/admin/login").into_response());
     };
+    csrf::verify_form(&session.csrf_token, &form.csrf_token)?;
     let slug = form
         .slug
-        .filter(|value| !value.trim().is_empty())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
         .unwrap_or_else(|| slugify(&form.title));
+    let slug = filesystem::safe_basename(&slug, "note slug")?.to_string();
     let front_matter = FrontMatter {
         title: Some(form.title.clone()),
         slug: Some(slug.clone()),
@@ -565,17 +664,30 @@ pub async fn save_note(
 pub async fn upload_markdown(
     State(state): State<AppState>,
     jar: CookieJar,
+    headers: HeaderMap,
     mut multipart: Multipart,
 ) -> AppResult<Response> {
-    let Some(_user) = auth::current_user(&jar, &state)? else {
+    let Some(session) = auth::current_admin_session(&jar, &state)? else {
         return Ok(Redirect::to("/admin/login").into_response());
     };
+    let mut csrf_token = multipart_csrf_header(&headers);
+    let mut uploads = Vec::new();
     while let Some(field) = multipart
         .next_field()
         .await
         .map_err(multipart_upload_error)?
     {
+        let name = field.name().unwrap_or_default().to_string();
         let filename = field.file_name().unwrap_or("upload.md").to_string();
+        if name == csrf::CSRF_FORM_FIELD {
+            csrf_token = Some(
+                std::str::from_utf8(&field.bytes().await.map_err(multipart_upload_error)?)
+                    .map_err(AppError::internal)?
+                    .to_string(),
+            );
+            continue;
+        }
+        let filename = filesystem::safe_basename(&filename, "markdown filename")?.to_string();
         if !filename.ends_with(".md") && !filename.ends_with(".markdown") {
             return Err(AppError::BadRequest(
                 "only markdown uploads are allowed".into(),
@@ -585,6 +697,13 @@ pub async fn upload_markdown(
         if bytes.len() > state.config.upload_limit_mb * 1024 * 1024 {
             return Err(AppError::BadRequest("upload too large".into()));
         }
+        uploads.push((filename, bytes.to_vec()));
+    }
+    csrf::verify_form(
+        &session.csrf_token,
+        csrf_token.as_deref().unwrap_or_default(),
+    )?;
+    for (filename, bytes) in uploads {
         let slug = slugify(
             filename
                 .trim_end_matches(".markdown")
@@ -610,20 +729,33 @@ pub async fn upload_markdown(
 pub async fn upload_asset(
     State(state): State<AppState>,
     jar: CookieJar,
+    headers: HeaderMap,
     mut multipart: Multipart,
 ) -> AppResult<Response> {
-    let Some(_user) = auth::current_user(&jar, &state)? else {
+    let Some(session) = auth::current_admin_session(&jar, &state)? else {
         return Ok(Redirect::to("/admin/login").into_response());
     };
+    let mut csrf_token = multipart_csrf_header(&headers);
+    let mut uploads = Vec::new();
     while let Some(field) = multipart
         .next_field()
         .await
         .map_err(multipart_upload_error)?
     {
+        let name = field.name().unwrap_or_default().to_string();
         let filename = field.file_name().unwrap_or("upload.bin").to_string();
+        if name == csrf::CSRF_FORM_FIELD {
+            csrf_token = Some(
+                std::str::from_utf8(&field.bytes().await.map_err(multipart_upload_error)?)
+                    .map_err(AppError::internal)?
+                    .to_string(),
+            );
+            continue;
+        }
+        let filename = filesystem::safe_basename(&filename, "asset filename")?.to_string();
         if !allowed_asset_filename(&filename) {
             return Err(AppError::BadRequest(
-                "unsupported asset type; allowlisted examples: png, jpg, webp, svg, mp3, mp4, pdf, zip, txt"
+                "unsupported asset type; allowlisted examples: png, jpg, webp, mp3, mp4, pdf, zip, txt"
                     .into(),
             ));
         }
@@ -631,6 +763,13 @@ pub async fn upload_asset(
         if bytes.len() > state.config.upload_limit_mb * 1024 * 1024 {
             return Err(AppError::BadRequest("upload too large".into()));
         }
+        uploads.push((filename, bytes.to_vec()));
+    }
+    csrf::verify_form(
+        &session.csrf_token,
+        csrf_token.as_deref().unwrap_or_default(),
+    )?;
+    for (filename, bytes) in uploads {
         filesystem::write_asset(&state.config, &filename, &bytes)?;
     }
     let summary = state.build_service.rebuild("asset upload").await?;
@@ -644,10 +783,15 @@ pub async fn upload_asset(
     Ok(Redirect::to("/admin").into_response())
 }
 
-pub async fn rebuild_site(State(state): State<AppState>, jar: CookieJar) -> AppResult<Response> {
-    let Some(_user) = auth::current_user(&jar, &state)? else {
+pub async fn rebuild_site(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Form(form): Form<CsrfForm>,
+) -> AppResult<Response> {
+    let Some(session) = auth::current_admin_session(&jar, &state)? else {
         return Ok(Redirect::to("/admin/login").into_response());
     };
+    csrf::verify_form(&session.csrf_token, &form.csrf_token)?;
     let summary = state.build_service.rebuild("manual rebuild").await?;
     if !summary.media_jobs.is_empty() {
         state
@@ -676,7 +820,7 @@ fn allowed_asset_filename(filename: &str) -> bool {
         .unwrap_or_default();
     matches!(
         ext.as_str(),
-        "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "mp3" | "mp4" | "pdf" | "txt" | "zip"
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "mp3" | "mp4" | "pdf" | "txt" | "zip"
     )
 }
 
@@ -684,11 +828,18 @@ pub async fn get_build_progress(
     State(state): State<AppState>,
     jar: CookieJar,
 ) -> AppResult<Json<crate::build::pipeline::BuildProgress>> {
-    let Some(_user) = auth::current_user(&jar, &state)? else {
+    let Some(_session) = auth::current_admin_session(&jar, &state)? else {
         return Err(AppError::Unauthorized);
     };
     let progress = state.build_service.progress.read().await;
     Ok(Json(progress.clone()))
+}
+
+fn multipart_csrf_header(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get(csrf::CSRF_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .map(ToOwned::to_owned)
 }
 
 fn multipart_upload_error(error: impl std::fmt::Display) -> AppError {
@@ -700,6 +851,7 @@ fn multipart_upload_error(error: impl std::fmt::Display) -> AppError {
 async fn dashboard_response(
     state: &AppState,
     user: String,
+    csrf_token: String,
     password_error: Option<String>,
 ) -> AppResult<Response> {
     let site = state.site.read().await.clone();
@@ -710,12 +862,14 @@ async fn dashboard_response(
         build_events: state.db.recent_builds(12)?,
         password_error,
         public_user_count: state.db.public_user_count()?,
+        csrf_token,
     })
 }
 
 async fn users_response(
     state: &AppState,
     _admin_user: String,
+    csrf_token: String,
     create_username: String,
     create_error: Option<String>,
     success: Option<String>,
@@ -729,12 +883,14 @@ async fn users_response(
         create_username,
         create_error,
         success,
+        csrf_token,
     })
 }
 
 async fn user_detail_response(
     state: &AppState,
     _admin_user: String,
+    csrf_token: String,
     managed_username: &str,
     form_username: String,
     update_error: Option<String>,
@@ -750,6 +906,7 @@ async fn user_detail_response(
         form_username,
         update_error,
         success,
+        csrf_token,
     })
 }
 

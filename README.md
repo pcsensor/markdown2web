@@ -73,7 +73,16 @@ data/app.db             # SQLite 数据库
 - `M2W_ADMIN_USERNAME`
 - `M2W_ADMIN_PASSWORD`
 - `M2W_WATCH_ENABLED`
+- `M2W_SECURE_COOKIES`（默认 `false`；HTTPS 生产部署建议设为 `true`）
+- `M2W_SESSION_TTL_HOURS`（默认 `168`）
 - `M2W_UPLOAD_LIMIT_MB`（默认 `128`，用于 Markdown/资源上传；上传视频时按实际文件大小调高）
+
+## 安全说明
+
+- 后台与账号状态变更请求会校验 CSRF token；自定义前端请求需要携带 `X-CSRF-Token`。
+- 管理员提交的 slug 和上传文件名只允许安全 basename，禁止 `/`、`\`、`..`。
+- 上传资源不支持 SVG；`/static/favicon.svg` 属于内置静态资源，不受后台上传限制影响。
+- 登录、注册、批注和弹幕写入有 SQLite 限流；单进程部署下无需额外服务。
 
 ## 验证
 

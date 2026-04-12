@@ -50,6 +50,7 @@
       {% when None %}
       {% endmatch %}
     <form action="/admin/users/{{ managed_user.route_key }}/update" method="post" class="stack-form">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
       <label>用户名<input type="text" name="username" value="{{ form_username }}" autocomplete="username" required /></label>
       <label>新密码<input type="password" name="new_password" minlength="8" autocomplete="new-password" /></label>
       <label>确认新密码<input type="password" name="confirm_password" minlength="8" autocomplete="new-password" /></label>
@@ -62,6 +63,7 @@
       <span class="panel-chip">danger</span>
     </div>
     <form action="/admin/users/{{ managed_user.route_key }}/delete" method="post" class="stack-form admin-danger-zone">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
       <p class="muted">删除后会同步移除该用户的登录会话与评论/高亮数据，此操作不可撤销。</p>
       <button type="submit" class="admin-danger-button">删除用户</button>
     </form>

@@ -4,10 +4,12 @@ use std::sync::Arc;
 use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode, header},
+    response::Response,
 };
 use markdown2web::{
     app,
     config::AppConfig,
+    content::markdown::render_markdown,
     store::{filesystem, sqlite::AppDatabase},
 };
 use regex::Regex;
@@ -35,6 +37,8 @@ fn test_config(temp: &TempDir) -> AppConfig {
         admin_password: "admin123456".into(),
         watch_enabled: false,
         turnstile_enabled: false,
+        secure_cookies: false,
+        session_ttl_hours: 168,
         upload_limit_mb: 10,
         turnstile_site_key: String::new(),
         turnstile_secret_key: String::new(),
@@ -49,6 +53,13 @@ async fn setup_with_upload_limit(upload_limit_mb: usize) -> (TempDir, app::AppSt
     let temp = TempDir::new().unwrap();
     let mut config = test_config(&temp);
     config.upload_limit_mb = upload_limit_mb;
+    setup_with_config(temp, config).await
+}
+
+async fn setup_with_config(
+    temp: TempDir,
+    config: AppConfig,
+) -> (TempDir, app::AppState, axum::Router) {
     config.ensure_directories().unwrap();
     let db = Arc::new(AppDatabase::open(&config.database_path()).unwrap());
     db.initialize(&config.admin_username, &config.admin_password)
@@ -56,6 +67,165 @@ async fn setup_with_upload_limit(upload_limit_mb: usize) -> (TempDir, app::AppSt
     let state = app::AppState::bootstrap(config, db).await.unwrap();
     let router = app::build_router(state.clone());
     (temp, state, router)
+}
+
+fn cookie_header(response: &Response) -> String {
+    response
+        .headers()
+        .get_all(header::SET_COOKIE)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .filter_map(|value| value.split(';').next())
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
+async fn response_html(response: Response) -> String {
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    String::from_utf8(body.to_vec()).unwrap()
+}
+
+fn csrf_from_html(html: &str) -> String {
+    Regex::new(r#"name="_csrf" value="([^"]+)""#)
+        .unwrap()
+        .captures(html)
+        .and_then(|caps| caps.get(1))
+        .map(|capture| capture.as_str().to_string())
+        .expect("csrf token should be rendered")
+}
+
+fn csrf_from_note_html(html: &str) -> String {
+    Regex::new(r#"data-csrf-token="([^"]*)""#)
+        .unwrap()
+        .captures(html)
+        .and_then(|caps| caps.get(1))
+        .map(|capture| capture.as_str().to_string())
+        .expect("note csrf token should be rendered")
+}
+
+async fn admin_login(router: &axum::Router) -> String {
+    let response = admin_login_response(router, "admin123456").await;
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    cookie_header(&response)
+}
+
+async fn admin_login_response(router: &axum::Router, password: &str) -> Response {
+    let login_page = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/admin/login")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let pre_auth_cookie = cookie_header(&login_page);
+    let html = response_html(login_page).await;
+    let csrf = csrf_from_html(&html);
+
+    let login_request = Request::builder()
+        .method("POST")
+        .uri("/admin/login")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::COOKIE, pre_auth_cookie)
+        .body(Body::from(format!(
+            "username=admin&password={password}&_csrf={csrf}"
+        )))
+        .unwrap();
+    router.clone().oneshot(login_request).await.unwrap()
+}
+
+async fn admin_page(router: &axum::Router, cookie: &str, uri: &str) -> (String, String) {
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(uri)
+                .header(header::COOKIE, cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let html = response_html(response).await;
+    let csrf = csrf_from_html(&html);
+    (html, csrf)
+}
+
+async fn public_register(
+    router: &axum::Router,
+    username: &str,
+    password: &str,
+    next: &str,
+) -> String {
+    let (pre_auth_cookie, csrf) = account_pre_auth(router, next).await;
+    let request = Request::builder()
+        .method("POST")
+        .uri("/account/register")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::COOKIE, pre_auth_cookie)
+        .body(Body::from(format!(
+            "username={username}&password={password}&next={next}&_csrf={csrf}"
+        )))
+        .unwrap();
+    let response = router.clone().oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    cookie_header(&response)
+}
+
+async fn public_login(
+    router: &axum::Router,
+    username: &str,
+    password: &str,
+    next: &str,
+) -> Response {
+    let (pre_auth_cookie, csrf) = account_pre_auth(router, next).await;
+    let request = Request::builder()
+        .method("POST")
+        .uri("/account/login")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::COOKIE, pre_auth_cookie)
+        .body(Body::from(format!(
+            "username={username}&password={password}&next={next}&_csrf={csrf}"
+        )))
+        .unwrap();
+    router.clone().oneshot(request).await.unwrap()
+}
+
+async fn account_pre_auth(router: &axum::Router, next: &str) -> (String, String) {
+    let account_page = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/account?next={next}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let pre_auth_cookie = cookie_header(&account_page);
+    let html = response_html(account_page).await;
+    let csrf = csrf_from_html(&html);
+    (pre_auth_cookie, csrf)
+}
+
+async fn note_csrf(router: &axum::Router, cookie: &str, slug: &str) -> String {
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/notes/{slug}"))
+                .header(header::COOKIE, cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    csrf_from_note_html(&response_html(response).await)
 }
 
 #[tokio::test]
@@ -135,36 +305,9 @@ async fn admin_auth_guard_and_save_note() {
     let html = String::from_utf8(body.to_vec()).unwrap();
     assert!(html.contains("auth-panel"));
 
-    let login_request = Request::builder()
-        .method("POST")
-        .uri("/admin/login")
-        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-        .body(Body::from("username=admin&password=admin123456"))
-        .unwrap();
-    let response = router.clone().oneshot(login_request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::SEE_OTHER);
-    let cookie = response
-        .headers()
-        .get(header::SET_COOKIE)
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_string();
+    let cookie = admin_login(&router).await;
 
-    let dashboard = router
-        .clone()
-        .oneshot(
-            Request::builder()
-                .uri("/admin")
-                .header(header::COOKIE, &cookie)
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(dashboard.status(), StatusCode::OK);
-    let body = to_bytes(dashboard.into_body(), usize::MAX).await.unwrap();
-    let html = String::from_utf8(body.to_vec()).unwrap();
+    let (html, csrf) = admin_page(&router, &cookie, "/admin").await;
     assert!(html.contains("修改管理员密码"));
     assert!(html.contains("action=\"/admin/password\""));
     assert!(html.contains("href=\"/admin/users\""));
@@ -174,8 +317,8 @@ async fn admin_auth_guard_and_save_note() {
         .method("POST")
         .uri("/admin/notes/save")
         .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-        .header(header::COOKIE, cookie)
-        .body(Body::from("title=Integration%20Note&summary=Saved%20from%20test&tags=testing,axum&status=published&aliases=&body=%23%20Integration%20Note%0A%0AHello%20from%20test"))
+        .header(header::COOKIE, &cookie)
+        .body(Body::from(format!("title=Integration%20Note&summary=Saved%20from%20test&tags=testing,axum&status=published&aliases=&body=%23%20Integration%20Note%0A%0AHello%20from%20test&_csrf={csrf}")))
         .unwrap();
     let response = router.clone().oneshot(save_request).await.unwrap();
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
@@ -199,25 +342,12 @@ async fn admin_auth_guard_and_save_note() {
 async fn admin_can_upload_mp4_asset() {
     let (_temp, state, router) = setup().await;
 
-    let login_request = Request::builder()
-        .method("POST")
-        .uri("/admin/login")
-        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-        .body(Body::from("username=admin&password=admin123456"))
-        .unwrap();
-    let response = router.clone().oneshot(login_request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::SEE_OTHER);
-    let cookie = response
-        .headers()
-        .get(header::SET_COOKIE)
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_string();
+    let cookie = admin_login(&router).await;
+    let (_html, csrf) = admin_page(&router, &cookie, "/admin").await;
 
     let boundary = "M2WBOUNDARY";
     let body = format!(
-        "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"demo-upload.mp4\"\r\nContent-Type: video/mp4\r\n\r\nfake-mp4\r\n--{boundary}--\r\n"
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"_csrf\"\r\n\r\n{csrf}\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"demo-upload.mp4\"\r\nContent-Type: video/mp4\r\n\r\nfake-mp4\r\n--{boundary}--\r\n"
     );
     let upload_request = Request::builder()
         .method("POST")
@@ -226,7 +356,8 @@ async fn admin_can_upload_mp4_asset() {
             header::CONTENT_TYPE,
             format!("multipart/form-data; boundary={boundary}"),
         )
-        .header(header::COOKIE, cookie)
+        .header(header::COOKIE, &cookie)
+        .header("x-csrf-token", &csrf)
         .body(Body::from(body))
         .unwrap();
     let response = router.oneshot(upload_request).await.unwrap();
@@ -241,25 +372,12 @@ async fn admin_can_upload_mp4_asset() {
 async fn admin_can_upload_mp3_asset() {
     let (_temp, state, router) = setup().await;
 
-    let login_request = Request::builder()
-        .method("POST")
-        .uri("/admin/login")
-        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-        .body(Body::from("username=admin&password=admin123456"))
-        .unwrap();
-    let response = router.clone().oneshot(login_request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::SEE_OTHER);
-    let cookie = response
-        .headers()
-        .get(header::SET_COOKIE)
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_string();
+    let cookie = admin_login(&router).await;
+    let (_html, csrf) = admin_page(&router, &cookie, "/admin").await;
 
     let boundary = "M2WBOUNDARY";
     let body = format!(
-        "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"demo-upload.mp3\"\r\nContent-Type: audio/mpeg\r\n\r\nfake-mp3\r\n--{boundary}--\r\n"
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"_csrf\"\r\n\r\n{csrf}\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"demo-upload.mp3\"\r\nContent-Type: audio/mpeg\r\n\r\nfake-mp3\r\n--{boundary}--\r\n"
     );
     let upload_request = Request::builder()
         .method("POST")
@@ -268,7 +386,8 @@ async fn admin_can_upload_mp3_asset() {
             header::CONTENT_TYPE,
             format!("multipart/form-data; boundary={boundary}"),
         )
-        .header(header::COOKIE, cookie)
+        .header(header::COOKIE, &cookie)
+        .header("x-csrf-token", &csrf)
         .body(Body::from(body))
         .unwrap();
     let response = router.oneshot(upload_request).await.unwrap();
@@ -283,24 +402,15 @@ async fn admin_can_upload_mp3_asset() {
 async fn admin_can_upload_mp3_larger_than_default_body_limit() {
     let (_temp, state, router) = setup().await;
 
-    let login_request = Request::builder()
-        .method("POST")
-        .uri("/admin/login")
-        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-        .body(Body::from("username=admin&password=admin123456"))
-        .unwrap();
-    let response = router.clone().oneshot(login_request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::SEE_OTHER);
-    let cookie = response
-        .headers()
-        .get(header::SET_COOKIE)
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_string();
+    let cookie = admin_login(&router).await;
+    let (_html, csrf) = admin_page(&router, &cookie, "/admin").await;
 
     let boundary = "M2WLARGEMP3";
     let mut body = Vec::new();
+    body.extend_from_slice(
+        format!("--{boundary}\r\nContent-Disposition: form-data; name=\"_csrf\"\r\n\r\n{csrf}\r\n")
+            .as_bytes(),
+    );
     body.extend_from_slice(
         format!(
             "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"large-upload.mp3\"\r\nContent-Type: audio/mpeg\r\n\r\n"
@@ -317,7 +427,8 @@ async fn admin_can_upload_mp3_larger_than_default_body_limit() {
             header::CONTENT_TYPE,
             format!("multipart/form-data; boundary={boundary}"),
         )
-        .header(header::COOKIE, cookie)
+        .header(header::COOKIE, &cookie)
+        .header("x-csrf-token", &csrf)
         .body(Body::from(body))
         .unwrap();
     let response = router.oneshot(upload_request).await.unwrap();
@@ -331,24 +442,15 @@ async fn admin_can_upload_mp3_larger_than_default_body_limit() {
 async fn admin_can_upload_32mb_mp4_when_limit_allows() {
     let (_temp, state, router) = setup_with_upload_limit(64).await;
 
-    let login_request = Request::builder()
-        .method("POST")
-        .uri("/admin/login")
-        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-        .body(Body::from("username=admin&password=admin123456"))
-        .unwrap();
-    let response = router.clone().oneshot(login_request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::SEE_OTHER);
-    let cookie = response
-        .headers()
-        .get(header::SET_COOKIE)
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_string();
+    let cookie = admin_login(&router).await;
+    let (_html, csrf) = admin_page(&router, &cookie, "/admin").await;
 
     let boundary = "M2W32MBMP4";
     let mut body = Vec::new();
+    body.extend_from_slice(
+        format!("--{boundary}\r\nContent-Disposition: form-data; name=\"_csrf\"\r\n\r\n{csrf}\r\n")
+            .as_bytes(),
+    );
     body.extend_from_slice(
         format!(
             "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"large-video.mp4\"\r\nContent-Type: video/mp4\r\n\r\n"
@@ -365,7 +467,8 @@ async fn admin_can_upload_32mb_mp4_when_limit_allows() {
             header::CONTENT_TYPE,
             format!("multipart/form-data; boundary={boundary}"),
         )
-        .header(header::COOKIE, cookie)
+        .header(header::COOKIE, &cookie)
+        .header("x-csrf-token", &csrf)
         .body(Body::from(body))
         .unwrap();
     let response = router.oneshot(upload_request).await.unwrap();
@@ -379,24 +482,15 @@ async fn admin_can_upload_32mb_mp4_when_limit_allows() {
 async fn admin_upload_over_limit_does_not_return_internal_error() {
     let (_temp, _state, router) = setup_with_upload_limit(1).await;
 
-    let login_request = Request::builder()
-        .method("POST")
-        .uri("/admin/login")
-        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-        .body(Body::from("username=admin&password=admin123456"))
-        .unwrap();
-    let response = router.clone().oneshot(login_request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::SEE_OTHER);
-    let cookie = response
-        .headers()
-        .get(header::SET_COOKIE)
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_string();
+    let cookie = admin_login(&router).await;
+    let (_html, csrf) = admin_page(&router, &cookie, "/admin").await;
 
     let boundary = "M2WOVERLIMIT";
     let mut body = Vec::new();
+    body.extend_from_slice(
+        format!("--{boundary}\r\nContent-Disposition: form-data; name=\"_csrf\"\r\n\r\n{csrf}\r\n")
+            .as_bytes(),
+    );
     body.extend_from_slice(
         format!(
             "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"too-large.mp3\"\r\nContent-Type: audio/mpeg\r\n\r\n"
@@ -413,11 +507,192 @@ async fn admin_upload_over_limit_does_not_return_internal_error() {
             header::CONTENT_TYPE,
             format!("multipart/form-data; boundary={boundary}"),
         )
-        .header(header::COOKIE, cookie)
+        .header(header::COOKIE, &cookie)
+        .header("x-csrf-token", &csrf)
         .body(Body::from(body))
         .unwrap();
     let response = router.oneshot(upload_request).await.unwrap();
     assert_ne!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+}
+
+#[tokio::test]
+async fn csrf_is_required_for_state_changing_requests() {
+    let (_temp, _state, router) = setup().await;
+    let admin_cookie = admin_login(&router).await;
+
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/admin/rebuild")
+                .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                .header(header::COOKIE, &admin_cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let user_cookie =
+        public_register(&router, "csrf-user", "ReaderPass123", "/notes/welcome").await;
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/notes/welcome/annotations")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::COOKIE, &user_cookie)
+                .body(Body::from(
+                    json!({
+                        "start_offset": 0,
+                        "end_offset": 7,
+                        "quote": "Welcome",
+                        "comment": "missing csrf"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn admin_rejects_unsafe_slugs_filenames_and_svg_uploads() {
+    let (_temp, state, router) = setup().await;
+    let admin_cookie = admin_login(&router).await;
+    let (_html, csrf) = admin_page(&router, &admin_cookie, "/admin").await;
+
+    let save_request = Request::builder()
+        .method("POST")
+        .uri("/admin/notes/save")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::COOKIE, &admin_cookie)
+        .body(Body::from(format!(
+            "title=Unsafe&slug=../outside&summary=x&tags=&status=published&aliases=&body=body&_csrf={csrf}"
+        )))
+        .unwrap();
+    let response = router.clone().oneshot(save_request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert!(!state.config.notes_dir.join("../outside.md").exists());
+
+    let boundary = "M2WUNSAFE";
+    let body = format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"_csrf\"\r\n\r\n{csrf}\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"../evil.mp3\"\r\nContent-Type: audio/mpeg\r\n\r\nfake\r\n--{boundary}--\r\n"
+    );
+    let upload_request = Request::builder()
+        .method("POST")
+        .uri("/admin/upload/asset")
+        .header(
+            header::CONTENT_TYPE,
+            format!("multipart/form-data; boundary={boundary}"),
+        )
+        .header(header::COOKIE, &admin_cookie)
+        .header("x-csrf-token", &csrf)
+        .body(Body::from(body))
+        .unwrap();
+    let response = router.clone().oneshot(upload_request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let boundary = "M2WSVG";
+    let body = format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"_csrf\"\r\n\r\n{csrf}\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"unsafe.svg\"\r\nContent-Type: image/svg+xml\r\n\r\n<svg></svg>\r\n--{boundary}--\r\n"
+    );
+    let upload_request = Request::builder()
+        .method("POST")
+        .uri("/admin/upload/asset")
+        .header(
+            header::CONTENT_TYPE,
+            format!("multipart/form-data; boundary={boundary}"),
+        )
+        .header(header::COOKIE, &admin_cookie)
+        .header("x-csrf-token", &csrf)
+        .body(Body::from(body))
+        .unwrap();
+    let response = router.oneshot(upload_request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[test]
+fn media_embed_label_and_src_are_escaped() {
+    let (html, _) = render_markdown(
+        r#"#[<img src=x onerror=alert(1)>](/assets/sound"bad.mp3)
+
+@[<script>alert(1)</script>](/assets/movie"bad.mp4)"#,
+    )
+    .unwrap();
+
+    assert!(html.contains("&lt;img src=x onerror=alert(1)&gt;"));
+    assert!(html.contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
+    assert!(html.contains("/assets/sound&quot;bad.mp3"));
+    assert!(html.contains("/assets/movie&quot;bad.mp4"));
+    assert!(!html.contains("<script>alert(1)</script>"));
+}
+
+#[tokio::test]
+async fn expired_sessions_are_rejected_and_secure_cookie_is_configurable() {
+    let temp = TempDir::new().unwrap();
+    let mut config = test_config(&temp);
+    config.secure_cookies = true;
+    let (_temp, state, router) = setup_with_config(temp, config).await;
+
+    let login_response = admin_login_response(&router, "admin123456").await;
+    assert_eq!(login_response.status(), StatusCode::SEE_OTHER);
+    let set_cookie = login_response
+        .headers()
+        .get_all(header::SET_COOKIE)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(set_cookie.contains("Secure"));
+
+    state
+        .db
+        .create_public_user("expired-user", "ReaderPass123")
+        .unwrap();
+    let expired = state.db.create_public_session("expired-user", -1).unwrap();
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/notes/welcome/danmaku")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(
+                    header::COOKIE,
+                    format!("m2w_user_session={}", expired.token),
+                )
+                .header("x-csrf-token", expired.csrf_token)
+                .body(Body::from(
+                    json!({
+                        "video_src": "/assets/demo.mp4#0",
+                        "time_ms": 100,
+                        "body": "expired"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn admin_login_is_rate_limited() {
+    let (_temp, _state, router) = setup().await;
+
+    for _ in 0..5 {
+        let response = admin_login_response(&router, "wrong-password").await;
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    let response = admin_login_response(&router, "wrong-password").await;
+    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
 }
 
 #[tokio::test]
@@ -580,36 +855,9 @@ status: published
 async fn admin_can_change_password_and_old_password_stops_working() {
     let (_temp, _state, router) = setup().await;
 
-    let login_request = Request::builder()
-        .method("POST")
-        .uri("/admin/login")
-        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-        .body(Body::from("username=admin&password=admin123456"))
-        .unwrap();
-    let response = router.clone().oneshot(login_request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::SEE_OTHER);
-    let cookie = response
-        .headers()
-        .get(header::SET_COOKIE)
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_string();
+    let cookie = admin_login(&router).await;
 
-    let dashboard = router
-        .clone()
-        .oneshot(
-            Request::builder()
-                .uri("/admin")
-                .header(header::COOKIE, &cookie)
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(dashboard.status(), StatusCode::OK);
-    let body = to_bytes(dashboard.into_body(), usize::MAX).await.unwrap();
-    let html = String::from_utf8(body.to_vec()).unwrap();
+    let (html, csrf) = admin_page(&router, &cookie, "/admin").await;
     assert!(html.contains("修改管理员密码"));
     assert!(html.contains("action=\"/admin/password\""));
 
@@ -618,9 +866,9 @@ async fn admin_can_change_password_and_old_password_stops_working() {
         .uri("/admin/password")
         .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
         .header(header::COOKIE, &cookie)
-        .body(Body::from(
-            "current_password=wrong-password&new_password=NewSecurePass123&confirm_password=NewSecurePass123",
-        ))
+        .body(Body::from(format!(
+            "current_password=wrong-password&new_password=NewSecurePass123&confirm_password=NewSecurePass123&_csrf={csrf}"
+        )))
         .unwrap();
     let response = router.clone().oneshot(invalid_change).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
@@ -633,9 +881,9 @@ async fn admin_can_change_password_and_old_password_stops_working() {
         .uri("/admin/password")
         .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
         .header(header::COOKIE, &cookie)
-        .body(Body::from(
-            "current_password=admin123456&new_password=short&confirm_password=short",
-        ))
+        .body(Body::from(format!(
+            "current_password=admin123456&new_password=short&confirm_password=short&_csrf={csrf}"
+        )))
         .unwrap();
     let response = router.clone().oneshot(too_short_change).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
@@ -648,9 +896,9 @@ async fn admin_can_change_password_and_old_password_stops_working() {
         .uri("/admin/password")
         .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
         .header(header::COOKIE, &cookie)
-        .body(Body::from(
-            "current_password=admin123456&new_password=NewSecurePass123&confirm_password=OtherSecurePass123",
-        ))
+        .body(Body::from(format!(
+            "current_password=admin123456&new_password=NewSecurePass123&confirm_password=OtherSecurePass123&_csrf={csrf}"
+        )))
         .unwrap();
     let response = router.clone().oneshot(mismatch_change).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
@@ -663,9 +911,9 @@ async fn admin_can_change_password_and_old_password_stops_working() {
         .uri("/admin/password")
         .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
         .header(header::COOKIE, &cookie)
-        .body(Body::from(
-            "current_password=admin123456&new_password=NewSecurePass123&confirm_password=NewSecurePass123",
-        ))
+        .body(Body::from(format!(
+            "current_password=admin123456&new_password=NewSecurePass123&confirm_password=NewSecurePass123&_csrf={csrf}"
+        )))
         .unwrap();
     let response = router.clone().oneshot(change_password).await.unwrap();
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
@@ -713,25 +961,13 @@ async fn admin_can_change_password_and_old_password_stops_working() {
     let html = String::from_utf8(body.to_vec()).unwrap();
     assert!(html.contains("密码已更新，请使用新密码重新登录"));
 
-    let old_password_login = Request::builder()
-        .method("POST")
-        .uri("/admin/login")
-        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-        .body(Body::from("username=admin&password=admin123456"))
-        .unwrap();
-    let response = router.clone().oneshot(old_password_login).await.unwrap();
+    let response = admin_login_response(&router, "admin123456").await;
     assert_eq!(response.status(), StatusCode::OK);
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let html = String::from_utf8(body.to_vec()).unwrap();
     assert!(html.contains("Invalid username or password"));
 
-    let new_password_login = Request::builder()
-        .method("POST")
-        .uri("/admin/login")
-        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-        .body(Body::from("username=admin&password=NewSecurePass123"))
-        .unwrap();
-    let response = router.oneshot(new_password_login).await.unwrap();
+    let response = admin_login_response(&router, "NewSecurePass123").await;
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
     assert_eq!(response.headers().get(header::LOCATION).unwrap(), "/admin");
 }
@@ -740,36 +976,9 @@ async fn admin_can_change_password_and_old_password_stops_working() {
 async fn admin_can_manage_public_users() {
     let (_temp, _state, router) = setup().await;
 
-    let admin_login = Request::builder()
-        .method("POST")
-        .uri("/admin/login")
-        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-        .body(Body::from("username=admin&password=admin123456"))
-        .unwrap();
-    let response = router.clone().oneshot(admin_login).await.unwrap();
-    assert_eq!(response.status(), StatusCode::SEE_OTHER);
-    let admin_cookie = response
-        .headers()
-        .get(header::SET_COOKIE)
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_string();
+    let admin_cookie = admin_login(&router).await;
 
-    let users_page = router
-        .clone()
-        .oneshot(
-            Request::builder()
-                .uri("/admin/users")
-                .header(header::COOKIE, &admin_cookie)
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(users_page.status(), StatusCode::OK);
-    let body = to_bytes(users_page.into_body(), usize::MAX).await.unwrap();
-    let html = String::from_utf8(body.to_vec()).unwrap();
+    let (html, users_csrf) = admin_page(&router, &admin_cookie, "/admin/users").await;
     assert!(html.contains("用户管理"));
     assert!(html.contains("action=\"/admin/users\""));
 
@@ -778,9 +987,9 @@ async fn admin_can_manage_public_users() {
         .uri("/admin/users")
         .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
         .header(header::COOKIE, &admin_cookie)
-        .body(Body::from(
-            "username=reader-one&password=ReaderPass123&confirm_password=ReaderPass123",
-        ))
+        .body(Body::from(format!(
+            "username=reader-one&password=ReaderPass123&confirm_password=ReaderPass123&_csrf={users_csrf}"
+        )))
         .unwrap();
     let response = router.clone().oneshot(create_user).await.unwrap();
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
@@ -794,9 +1003,9 @@ async fn admin_can_manage_public_users() {
         .uri("/admin/users")
         .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
         .header(header::COOKIE, &admin_cookie)
-        .body(Body::from(
-            "username=reader-two&password=ReaderPass123&confirm_password=ReaderPass123",
-        ))
+        .body(Body::from(format!(
+            "username=reader-two&password=ReaderPass123&confirm_password=ReaderPass123&_csrf={users_csrf}"
+        )))
         .unwrap();
     let response = router.clone().oneshot(create_second_user).await.unwrap();
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
@@ -805,20 +1014,12 @@ async fn admin_can_manage_public_users() {
         "/admin/users/reader-two?status=created"
     );
 
-    let manage_page = router
-        .clone()
-        .oneshot(
-            Request::builder()
-                .uri("/admin/users/reader-one?status=created")
-                .header(header::COOKIE, &admin_cookie)
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(manage_page.status(), StatusCode::OK);
-    let body = to_bytes(manage_page.into_body(), usize::MAX).await.unwrap();
-    let html = String::from_utf8(body.to_vec()).unwrap();
+    let (html, user_csrf) = admin_page(
+        &router,
+        &admin_cookie,
+        "/admin/users/reader-one?status=created",
+    )
+    .await;
     assert!(html.contains("管理用户：reader-one"));
     assert!(html.contains("action=\"/admin/users/reader-one/update\""));
     assert!(html.contains("action=\"/admin/users/reader-one/delete\""));
@@ -828,9 +1029,9 @@ async fn admin_can_manage_public_users() {
         .uri("/admin/users/reader-one/update")
         .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
         .header(header::COOKIE, &admin_cookie)
-        .body(Body::from(
-            "username=reader-two&new_password=&confirm_password=",
-        ))
+        .body(Body::from(format!(
+            "username=reader-two&new_password=&confirm_password=&_csrf={user_csrf}"
+        )))
         .unwrap();
     let response = router.clone().oneshot(duplicate_update).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
@@ -839,29 +1040,17 @@ async fn admin_can_manage_public_users() {
     assert!(html.contains("该用户名已被注册"));
     assert!(html.contains("action=\"/admin/users/reader-one/update\""));
 
-    let reader_login = Request::builder()
-        .method("POST")
-        .uri("/account/login")
-        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-        .body(Body::from(
-            "username=reader-one&password=ReaderPass123&next=/notes/welcome",
-        ))
-        .unwrap();
-    let response = router.clone().oneshot(reader_login).await.unwrap();
+    let response = public_login(&router, "reader-one", "ReaderPass123", "/notes/welcome").await;
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
-    let reader_cookie = response
-        .headers()
-        .get(header::SET_COOKIE)
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_string();
+    let reader_cookie = cookie_header(&response);
+    let reader_csrf = note_csrf(&router, &reader_cookie, "welcome").await;
 
     let create_annotation = Request::builder()
         .method("POST")
         .uri("/api/notes/welcome/annotations")
         .header(header::CONTENT_TYPE, "application/json")
         .header(header::COOKIE, &reader_cookie)
+        .header("x-csrf-token", &reader_csrf)
         .body(Body::from(
             json!({
                 "start_offset": 0,
@@ -881,9 +1070,9 @@ async fn admin_can_manage_public_users() {
         .uri("/admin/users/reader-one/update")
         .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
         .header(header::COOKIE, &admin_cookie)
-        .body(Body::from(
-            "username=reader-prime&new_password=PrimePass123&confirm_password=PrimePass123",
-        ))
+        .body(Body::from(format!(
+            "username=reader-prime&new_password=PrimePass123&confirm_password=PrimePass123&_csrf={user_csrf}"
+        )))
         .unwrap();
     let response = router.clone().oneshot(update_user).await.unwrap();
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
@@ -897,6 +1086,7 @@ async fn admin_can_manage_public_users() {
         .uri("/api/notes/welcome/annotations")
         .header(header::CONTENT_TYPE, "application/json")
         .header(header::COOKIE, &reader_cookie)
+        .header("x-csrf-token", &reader_csrf)
         .body(Body::from(
             json!({
                 "start_offset": 8,
@@ -910,29 +1100,13 @@ async fn admin_can_manage_public_users() {
     let response = router.clone().oneshot(stale_session_request).await.unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
-    let old_login = Request::builder()
-        .method("POST")
-        .uri("/account/login")
-        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-        .body(Body::from(
-            "username=reader-one&password=ReaderPass123&next=/notes/welcome",
-        ))
-        .unwrap();
-    let response = router.clone().oneshot(old_login).await.unwrap();
+    let response = public_login(&router, "reader-one", "ReaderPass123", "/notes/welcome").await;
     assert_eq!(response.status(), StatusCode::OK);
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let html = String::from_utf8(body.to_vec()).unwrap();
     assert!(html.contains("用户名或密码错误"));
 
-    let new_login = Request::builder()
-        .method("POST")
-        .uri("/account/login")
-        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-        .body(Body::from(
-            "username=reader-prime&password=PrimePass123&next=/notes/welcome",
-        ))
-        .unwrap();
-    let response = router.clone().oneshot(new_login).await.unwrap();
+    let response = public_login(&router, "reader-prime", "PrimePass123", "/notes/welcome").await;
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
 
     let public_annotations = router
@@ -957,7 +1131,8 @@ async fn admin_can_manage_public_users() {
         .method("POST")
         .uri("/admin/users/reader-prime/delete")
         .header(header::COOKIE, &admin_cookie)
-        .body(Body::empty())
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body(Body::from(format!("_csrf={user_csrf}")))
         .unwrap();
     let response = router.clone().oneshot(delete_user).await.unwrap();
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
@@ -1001,15 +1176,7 @@ async fn admin_can_manage_public_users() {
     let listed: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(listed["annotations"].as_array().unwrap().len(), 0);
 
-    let deleted_login = Request::builder()
-        .method("POST")
-        .uri("/account/login")
-        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-        .body(Body::from(
-            "username=reader-prime&password=PrimePass123&next=/notes/welcome",
-        ))
-        .unwrap();
-    let response = router.oneshot(deleted_login).await.unwrap();
+    let response = public_login(&router, "reader-prime", "PrimePass123", "/notes/welcome").await;
     assert_eq!(response.status(), StatusCode::OK);
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let html = String::from_utf8(body.to_vec()).unwrap();
@@ -1060,36 +1227,18 @@ async fn public_user_auth_and_annotation_api_flow() {
         .unwrap();
     assert_eq!(unauthorized_create.status(), StatusCode::UNAUTHORIZED);
 
-    let register_request = Request::builder()
-        .method("POST")
-        .uri("/account/register")
-        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-        .body(Body::from(
-            "username=alice&password=ReaderPass123&next=/notes/welcome",
-        ))
-        .unwrap();
-    let register_response = router.clone().oneshot(register_request).await.unwrap();
-    assert_eq!(register_response.status(), StatusCode::SEE_OTHER);
-    assert_eq!(
-        register_response.headers().get(header::LOCATION).unwrap(),
-        "/notes/welcome"
-    );
-    let user_cookie = register_response
-        .headers()
-        .get(header::SET_COOKIE)
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_string();
+    let user_cookie = public_register(&router, "alice", "ReaderPass123", "/notes/welcome").await;
     assert!(user_cookie.contains("m2w_user_session="));
 
+    let (duplicate_cookie, duplicate_csrf) = account_pre_auth(&router, "/account").await;
     let duplicate_register = Request::builder()
         .method("POST")
         .uri("/account/register")
         .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-        .body(Body::from(
-            "username=alice&password=ReaderPass123&next=/account",
-        ))
+        .header(header::COOKIE, duplicate_cookie)
+        .body(Body::from(format!(
+            "username=alice&password=ReaderPass123&next=/account&_csrf={duplicate_csrf}"
+        )))
         .unwrap();
     let duplicate_response = router.clone().oneshot(duplicate_register).await.unwrap();
     assert_eq!(duplicate_response.status(), StatusCode::OK);
@@ -1118,12 +1267,14 @@ async fn public_user_auth_and_annotation_api_flow() {
     assert!(html.contains("当前已登录"));
     assert!(html.contains("alice"));
     assert!(html.contains("data-annotation-enabled=\"true\""));
+    let user_csrf = csrf_from_note_html(&html);
 
     let create_request = Request::builder()
         .method("POST")
         .uri("/api/notes/welcome/annotations")
         .header(header::CONTENT_TYPE, "application/json")
         .header(header::COOKIE, &user_cookie)
+        .header("x-csrf-token", &user_csrf)
         .body(Body::from(
             json!({
                 "start_offset": 0,
@@ -1185,6 +1336,7 @@ async fn public_user_auth_and_annotation_api_flow() {
         .uri(format!("/api/annotations/{annotation_id}"))
         .header(header::CONTENT_TYPE, "application/json")
         .header(header::COOKIE, &user_cookie)
+        .header("x-csrf-token", &user_csrf)
         .body(Body::from(
             json!({
                 "color": "#bfdbfe",
@@ -1228,6 +1380,7 @@ async fn public_user_auth_and_annotation_api_flow() {
                 .method("DELETE")
                 .uri(format!("/api/annotations/{annotation_id}"))
                 .header(header::COOKIE, &user_cookie)
+                .header("x-csrf-token", &user_csrf)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -1258,7 +1411,7 @@ async fn public_user_auth_and_annotation_api_flow() {
         .uri("/account/logout")
         .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
         .header(header::COOKIE, &user_cookie)
-        .body(Body::from("next=/notes/welcome"))
+        .body(Body::from(format!("next=/notes/welcome&_csrf={user_csrf}")))
         .unwrap();
     let logout_response = router.clone().oneshot(logout_request).await.unwrap();
     assert_eq!(logout_response.status(), StatusCode::SEE_OTHER);
@@ -1267,15 +1420,7 @@ async fn public_user_auth_and_annotation_api_flow() {
         "/notes/welcome"
     );
 
-    let login_request = Request::builder()
-        .method("POST")
-        .uri("/account/login")
-        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-        .body(Body::from(
-            "username=alice&password=ReaderPass123&next=/notes/welcome",
-        ))
-        .unwrap();
-    let login_response = router.oneshot(login_request).await.unwrap();
+    let login_response = public_login(&router, "alice", "ReaderPass123", "/notes/welcome").await;
     assert_eq!(login_response.status(), StatusCode::SEE_OTHER);
     assert_eq!(
         login_response.headers().get(header::LOCATION).unwrap(),
@@ -1325,29 +1470,16 @@ async fn danmaku_api_allows_public_list_and_requires_login_to_post() {
         .unwrap();
     assert_eq!(unauthorized_create.status(), StatusCode::UNAUTHORIZED);
 
-    let register_request = Request::builder()
-        .method("POST")
-        .uri("/account/register")
-        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-        .body(Body::from(
-            "username=danmaku-user&password=ReaderPass123&next=/notes/welcome",
-        ))
-        .unwrap();
-    let register_response = router.clone().oneshot(register_request).await.unwrap();
-    assert_eq!(register_response.status(), StatusCode::SEE_OTHER);
-    let user_cookie = register_response
-        .headers()
-        .get(header::SET_COOKIE)
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_string();
+    let user_cookie =
+        public_register(&router, "danmaku-user", "ReaderPass123", "/notes/welcome").await;
+    let user_csrf = note_csrf(&router, &user_cookie, "welcome").await;
 
     let create_request = Request::builder()
         .method("POST")
         .uri("/api/notes/welcome/danmaku")
         .header(header::CONTENT_TYPE, "application/json")
         .header(header::COOKIE, &user_cookie)
+        .header("x-csrf-token", &user_csrf)
         .body(Body::from(
             json!({
                 "video_src": video_key,
@@ -1618,9 +1750,11 @@ fn admin_asset_upload_accepts_audio_and_video() {
 
     assert!(dashboard.contains(".mp3"));
     assert!(dashboard.contains(".mp4"));
+    assert!(!dashboard.contains(".svg"));
     assert!(admin.contains("\"mp3\""));
     assert!(admin.contains("\"mp4\""));
-    assert!(admin.contains("svg, mp3, mp4, pdf"));
+    assert!(!admin.contains("\"svg\""));
+    assert!(admin.contains("webp, mp3, mp4, pdf"));
 }
 
 #[test]

@@ -47,6 +47,7 @@ struct NoteTemplate {
     viewer_username: String,
     annotations_enabled: bool,
     is_admin: bool,
+    csrf_token: String,
 }
 
 #[derive(Template)]
@@ -134,8 +135,18 @@ pub async fn note_detail(
             })
         })
         .collect();
-    let (viewer, is_admin) = auth::current_viewer(&jar, &state)?.unzip();
-    let is_admin = is_admin.unwrap_or(false);
+    let viewer_session = auth::current_viewer_session(&jar, &state)?;
+    let viewer = viewer_session
+        .as_ref()
+        .map(|session| session.username.clone());
+    let is_admin = viewer_session
+        .as_ref()
+        .map(|session| session.is_admin)
+        .unwrap_or(false);
+    let csrf_token = viewer_session
+        .as_ref()
+        .map(|session| session.csrf_token.clone())
+        .unwrap_or_default();
     render(NoteTemplate {
         site_name: state.config.site_name.clone(),
         note,
@@ -144,6 +155,7 @@ pub async fn note_detail(
         viewer_username: viewer.clone().unwrap_or_default(),
         viewer,
         is_admin,
+        csrf_token,
     })
 }
 

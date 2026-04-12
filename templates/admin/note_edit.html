@@ -10,6 +10,7 @@
 </section>
 
 <form class="editor-grid" action="/admin/notes/save" method="post">
+  <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
   <div class="panel stack-form interactive-card">
     <div class="panel-title-row">
       <h2>元信息</h2>
