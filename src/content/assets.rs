@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
-    fs,
+    fs::{self, File},
+    io::{Read, Seek, SeekFrom},
     path::{Component, Path, PathBuf},
     process::{Command, Stdio},
 };
@@ -75,16 +76,34 @@ fn normalize_join(base: &Path, relative: &str) -> PathBuf {
 fn hashed_name(path: &Path) -> AppResult<String> {
     let metadata = fs::metadata(path)?;
     let size = metadata.len();
-    let modified = metadata
-        .modified()
-        .ok()
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-
+    
     let mut hasher = Sha256::new();
     hasher.update(size.to_le_bytes());
-    hasher.update(modified.to_le_bytes());
+
+    // 快速采样策略：读取文件头和尾各最多 4KB，代替脆弱的修改时间(mtime)
+    if size > 0 {
+        if let Ok(mut file) = File::open(path) {
+            let chunk_size = 4096;
+            let mut buffer = vec![0; chunk_size];
+            
+            // 采样头部 4KB
+            let head_read = file.read(&mut buffer).unwrap_or(0);
+            if head_read > 0 {
+                hasher.update(&buffer[..head_read]);
+            }
+            
+            // 如果文件大于 8KB，再采样尾部 4KB (很多媒体文件的元数据在尾部)
+            if size > (chunk_size * 2) as u64 {
+                if file.seek(SeekFrom::End(-(chunk_size as i64))).is_ok() {
+                    let tail_read = file.read(&mut buffer).unwrap_or(0);
+                    if tail_read > 0 {
+                        hasher.update(&buffer[..tail_read]);
+                    }
+                }
+            }
+        }
+    }
+
     let digest = hex::encode(hasher.finalize());
 
     let filename = path

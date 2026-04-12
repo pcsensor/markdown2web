@@ -388,9 +388,9 @@ pub async fn list_danmaku(
     Query(query): Query<DanmakuQuery>,
 ) -> AppResult<Json<DanmakuListResponse>> {
     ensure_published_note(&state, &slug).await?;
-    let video_src = normalize_video_src(query.video_src)?;
+    let (full_src, filename) = normalize_video_src(query.video_src)?;
     Ok(Json(DanmakuListResponse {
-        danmaku: state.db.list_video_danmaku(&slug, &video_src)?,
+        danmaku: state.db.list_video_danmaku(&slug, &full_src, &filename)?,
     }))
 }
 
@@ -403,14 +403,14 @@ pub async fn create_danmaku(
     ensure_published_note(&state, &slug).await?;
     let (username, _is_admin) =
         auth::current_viewer(&jar, &state)?.ok_or(AppError::Unauthorized)?;
-    let video_src = normalize_video_src(payload.video_src)?;
+    let (full_src, _filename) = normalize_video_src(payload.video_src)?;
     let body = normalize_danmaku_body(payload.body)?;
     let color = normalize_color(payload.color)?.unwrap_or_else(|| "#ffffff".into());
     validate_danmaku_time(payload.time_ms)?;
     let record = state.db.create_video_danmaku(NewVideoDanmaku {
         username: &username,
         note_slug: &slug,
-        video_src: &video_src,
+        video_src: &full_src,
         time_ms: payload.time_ms,
         body: &body,
         color: &color,
@@ -483,36 +483,32 @@ fn validate_offsets(start_offset: usize, end_offset: usize) -> AppResult<()> {
     Ok(())
 }
 
-fn normalize_video_src(value: String) -> AppResult<String> {
+fn normalize_video_src(value: String) -> AppResult<(String, String)> {
     let value = value.trim();
     if value.is_empty() || value.len() > 512 {
         return Err(AppError::BadRequest("video source is invalid".into()));
     }
     
-    // 1. 移除可能存在的锚点参数 (如 #0)
-    let asset_path = value
+    // 1. 移除锚点参数 (如 #0) 获取干净的完整路径
+    let full_path = value
         .split_once('#')
         .map(|(path, _)| path)
-        .unwrap_or(value);
+        .unwrap_or(value)
+        .to_string();
 
-    // 2. 验证是否为资源目录
-    if !asset_path.starts_with("/assets/") {
-        return Err(AppError::BadRequest(
-            "video source must be a site asset".into(),
-        ));
+    if !full_path.starts_with("/assets/") {
+        return Err(AppError::BadRequest("video source must be a site asset".into()));
     }
 
-    // 3. 获取文件名并尝试移除哈希前缀 (格式: 12位哈希-文件名)
-    let filename = asset_path.strip_prefix("/assets/").unwrap_or(asset_path);
-    
-    // 如果文件名形如 "f9391142153c-love.mp4"，提取 "-" 之后的部分
-    let normalized = if filename.len() > 13 && filename.as_bytes()[12] == b'-' {
-        &filename[13..]
+    // 2. 提取原始文件名 (剥离路径和可能的哈希前缀)
+    let asset_name = full_path.strip_prefix("/assets/").unwrap_or(&full_path);
+    let filename = if asset_name.len() > 13 && asset_name.as_bytes()[12] == b'-' {
+        &asset_name[13..]
     } else {
-        filename
-    };
+        asset_name
+    }.to_string();
 
-    Ok(normalized.to_string())
+    Ok((full_path, filename))
 }
 
 fn normalize_danmaku_body(value: String) -> AppResult<String> {

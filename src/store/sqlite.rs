@@ -558,20 +558,24 @@ impl AppDatabase {
     pub fn list_video_danmaku(
         &self,
         note_slug: &str,
-        video_src: &str,
+        full_src: &str,
+        filename: &str,
     ) -> AppResult<Vec<VideoDanmaku>> {
         let conn = self.conn.lock().expect("db mutex poisoned");
-        // 使用 LIKE 进行模糊匹配，以便找回包含旧哈希前缀的记录
-        let pattern = format!("%{}%", video_src);
+        // 后缀匹配模式: 匹配所有以该文件名结尾的记录
+        let suffix_pattern = format!("%{}", filename);
+        
         let mut stmt = conn.prepare(
             r#"
             SELECT id, username, note_slug, video_src, time_ms, body, color, created_at
             FROM video_danmaku
-            WHERE note_slug = ?1 AND video_src LIKE ?2
-            ORDER BY time_ms ASC, id ASC
+            WHERE note_slug = ?1 
+              AND (video_src = ?2 OR video_src LIKE ?3)
+            ORDER BY (video_src = ?2) DESC, time_ms ASC, id ASC
             "#,
         )?;
-        let rows = stmt.query_map(params![note_slug, pattern], video_danmaku_from_row)?;
+        
+        let rows = stmt.query_map(params![note_slug, full_src, suffix_pattern], video_danmaku_from_row)?;
         Ok(rows.filter_map(Result::ok).collect())
     }
 
