@@ -1888,6 +1888,28 @@ button.secondary, .button.secondary {
   /* 为控制条相对单位设置基准字体大小 */
   font-size: clamp(12px, 1.5vw, 14px);
 }
+/* 全屏样式适配 */
+.video-player:fullscreen {
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: #000;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.video-player:fullscreen .video-player-frame {
+  width: 100%;
+  height: 100%;
+  max-block-size: none;
+  aspect-ratio: auto;
+}
+.video-player:fullscreen .video-player-media {
+  object-fit: contain;
+}
 .video-player-media {
   position: absolute;
   inset: 0;

@@ -1696,13 +1696,44 @@ function wireVideoPlayers() {
     });
     container.style.setProperty('--danmaku-font-size', danmakuSizeSelect?.value || '1.25rem');
 
+    // 记录进入全屏前的滚动位置
+    let preFullscreenScrollY = 0;
+
     fullscreenButton?.addEventListener('click', async () => {
-      const target = container.querySelector('.video-player-frame') || container;
       if (document.fullscreenElement) {
         await document.exitFullscreen().catch(() => {});
         return;
       }
+      
+      preFullscreenScrollY = window.scrollY;
+      const target = container;
       await target.requestFullscreen?.().catch(() => {});
+    });
+
+    // 监听全屏状态变化，处理退出后的复位
+    container.addEventListener('fullscreenchange', () => {
+      if (!document.fullscreenElement) {
+        // 1. 退出时立即让容器失焦，防止浏览器尝试自动“滚动到焦点”导致跳动
+        if (document.activeElement === container) {
+          container.blur();
+        }
+        
+        // 2. 多阶段强制复位坐标，应对文档高度动态变化的情况
+        const restore = () => {
+          if (typeof preFullscreenScrollY === 'number') {
+            window.scrollTo({
+              top: preFullscreenScrollY,
+              behavior: 'instant'
+            });
+          }
+        };
+
+        // 立即复位一次，并分别在布局可能变动的时间点追加复位，确保彻底解决“底部截断”问题
+        restore();
+        setTimeout(restore, 20);
+        setTimeout(restore, 100);
+        setTimeout(restore, 250);
+      }
     });
 
     container.addEventListener('pointermove', () => {
