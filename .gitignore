@@ -8,3 +8,6 @@
 .claude/
 .sisyphus/
 .omc/
+.env
+.env.*
+!.env.example

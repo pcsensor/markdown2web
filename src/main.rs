@@ -5,6 +5,7 @@ use tokio::net::TcpListener;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    dotenvy::dotenv().ok();
     let config = AppConfig::from_env()?;
     config.ensure_directories()?;
 
