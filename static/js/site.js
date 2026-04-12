@@ -1702,14 +1702,40 @@ function wireVideoPlayers() {
     let preFullscreenScrollY = 0;
 
     fullscreenButton?.addEventListener('click', async () => {
-      if (document.fullscreenElement) {
-        await document.exitFullscreen().catch(() => {});
+      // 1. 尝试退出全屏
+      if (document.fullscreenElement || document.webkitFullscreenElement) {
+        if (document.exitFullscreen) await document.exitFullscreen().catch(() => {});
+        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
         return;
       }
       
       preFullscreenScrollY = window.scrollY;
-      const target = container;
-      await target.requestFullscreen?.().catch(() => {});
+      
+      // 2. 针对 iPhone/iOS 的特殊处理：它们通常不支持容器全屏，只能让 video 本身全屏
+      if (!container.requestFullscreen && video.webkitEnterFullscreen) {
+        video.webkitEnterFullscreen();
+        return;
+      }
+
+      // 3. 标准全屏请求 (Android/Desktop)
+      const requestFs = container.requestFullscreen || container.webkitRequestFullscreen || container.mozRequestFullScreen || container.msRequestFullscreen;
+      if (requestFs) {
+        await requestFs.call(container).catch((err) => {
+          console.warn('Fullscreen request failed', err);
+          // 最后的保底：尝试视频全屏
+          if (video.webkitEnterFullscreen) video.webkitEnterFullscreen();
+        });
+      }
+    });
+
+    // 针对 iOS 的全屏状态监听
+    video.addEventListener('webkitbeginfullscreen', () => {
+      container.classList.add('is-controls-visible');
+    });
+    video.addEventListener('webkitendfullscreen', () => {
+      if (preFullscreenScrollY >= 0) {
+        window.scrollTo(0, preFullscreenScrollY);
+      }
     });
 
     // 监听全屏状态变化，处理退出后的复位
