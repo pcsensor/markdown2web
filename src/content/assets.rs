@@ -65,10 +65,20 @@ fn normalize_join(base: &Path, relative: &str) -> PathBuf {
 }
 
 fn hashed_name(path: &Path) -> AppResult<String> {
-    let bytes = fs::read(path)?;
+    let metadata = fs::metadata(path)?;
+    let size = metadata.len();
+    let modified = metadata
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
     let mut hasher = Sha256::new();
-    hasher.update(bytes);
+    hasher.update(size.to_le_bytes());
+    hasher.update(modified.to_le_bytes());
     let digest = hex::encode(hasher.finalize());
+
     let filename = path
         .file_name()
         .and_then(|s| s.to_str())
@@ -146,44 +156,49 @@ pub fn materialize_assets(
             .first_or_octet_stream()
             .to_string();
 
-        if ffmpeg_available && is_image(&content_type) {
-            match materialize_image_variants(config, asset) {
-                Ok(Some(image)) => {
-                    records.extend(image.records);
-                    media.images.insert(asset.public_url.clone(), image.image);
-                    continue;
+        let mut processed_by_ffmpeg = false;
+
+        if ffmpeg_available {
+            if is_image(&content_type) {
+                match materialize_image_variants(config, asset) {
+                    Ok(Some(image)) => {
+                        records.extend(image.records);
+                        media.images.insert(asset.public_url.clone(), image.image);
+                        processed_by_ffmpeg = true;
+                    }
+                    Ok(None) => {}
+                    Err(err) => warnings.push(format!(
+                        "image optimization failed for {}: {}",
+                        asset.source_path.display(),
+                        err
+                    )),
                 }
-                Ok(None) => {}
-                Err(err) => warnings.push(format!(
-                    "image optimization skipped for {}: {}",
-                    asset.source_path.display(),
-                    err
-                )),
+            } else if is_video(&content_type) {
+                match materialize_video_variants(config, asset) {
+                    Ok(Some(video)) => {
+                        records.extend(video.records);
+                        media.videos.insert(asset.public_url.clone(), video.video);
+                        processed_by_ffmpeg = true;
+                    }
+                    Ok(None) => {}
+                    Err(err) => warnings.push(format!(
+                        "video optimization failed for {}: {}",
+                        asset.source_path.display(),
+                        err
+                    )),
+                }
             }
         }
 
-        if ffmpeg_available && is_video(&content_type) {
-            match materialize_video_variants(config, asset) {
-                Ok(Some(video)) => {
-                    records.extend(video.records);
-                    media.videos.insert(asset.public_url.clone(), video.video);
-                    continue;
-                }
-                Ok(None) => {}
-                Err(err) => warnings.push(format!(
-                    "video optimization skipped for {}: {}",
-                    asset.source_path.display(),
-                    err
-                )),
+        if !processed_by_ffmpeg {
+            if !ffmpeg_available && (is_image(&content_type) || is_video(&content_type)) {
+                warnings.push(format!(
+                    "ffmpeg not found; publishing original asset {}",
+                    asset.source_path.display()
+                ));
             }
-        } else if !ffmpeg_available && (is_image(&content_type) || is_video(&content_type)) {
-            warnings.push(format!(
-                "ffmpeg not found; publishing original asset {}",
-                asset.source_path.display()
-            ));
+            records.push(copy_original_asset(config, asset)?);
         }
-
-        records.push(copy_original_asset(config, asset)?);
     }
     records.sort_by(|a, b| a.public_url.cmp(&b.public_url));
     records.dedup_by(|a, b| a.public_url == b.public_url);
@@ -220,7 +235,12 @@ fn copy_original_asset(config: &AppConfig, asset: &AssetCandidate) -> AppResult<
     if let Some(parent) = destination.parent() {
         fs::create_dir_all(parent)?;
     }
-    fs::copy(&asset.source_path, &destination)?;
+
+    // 增量检查：如果目标文件已存在且比源文件新，跳过拷贝
+    if !generated_is_fresh(&asset.source_path, &destination) {
+        fs::copy(&asset.source_path, &destination)?;
+    }
+
     Ok(AssetRecord {
         source_path: asset.source_path.to_string_lossy().to_string(),
         output_rel_path: asset.output_rel_path.to_string_lossy().to_string(),

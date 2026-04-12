@@ -1542,8 +1542,9 @@ function wireVideoPlayers() {
       node.className = 'video-danmaku-item';
       node.textContent = item.body;
       node.style.color = item.color || '#fff';
-      const lane = Math.abs(Number(item.id || item.time_ms || 0)) % 7;
-      node.style.setProperty('--danmaku-top', `${8 + lane * 12}%`);
+      // 将弹幕轨道限制在视频上方的 40% 区域
+      const lane = Math.abs(Number(item.id || item.time_ms || 0)) % 5;
+      node.style.setProperty('--danmaku-top', `${5 + lane * 7}%`);
       danmakuLayer.appendChild(node);
       node.addEventListener('animationend', () => node.remove(), { once: true });
     };

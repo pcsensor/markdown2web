@@ -56,7 +56,9 @@ impl BuildService {
         let reason = reason.into();
         let _guard = self.build_lock.lock().await;
 
+        println!("Starting rebuild (reason: {})...", reason);
         let discovered = filesystem::discover_notes(&self.config)?;
+        println!("Discovered {} notes.", discovered.len());
         let lookup = LinkLookup::new(&discovered);
 
         let mut notes = Vec::new();
@@ -64,7 +66,10 @@ impl BuildService {
         let mut all_assets = Vec::<AssetCandidate>::new();
         let mut new_hashes = std::collections::HashMap::new();
 
-        for source in discovered {
+        for (i, source) in discovered.into_iter().enumerate() {
+            if i % 20 == 0 && i > 0 {
+                println!("Processing notes: {}/...", i);
+            }
             let rewritten = rewrite_markdown(&self.config, &source, &lookup)?;
             let (html, headings) = render_markdown(&rewritten.markdown)?;
             let note_assets: Vec<AssetRecord> = rewritten
@@ -117,6 +122,7 @@ impl BuildService {
             });
         }
 
+        println!("Deduplicating assets...");
         dedupe_assets(&mut all_assets);
         let changed_count = {
             let cache = self.cache.lock().await;
@@ -126,7 +132,9 @@ impl BuildService {
                     .map(|(slug, hash)| (slug.as_str(), hash.as_str())),
             )
         };
+        println!("Materializing {} assets...", all_assets.len());
         let materialized_assets = materialize_assets(&self.config, &all_assets)?;
+        println!("Applying media optimizations to notes...");
         for note in &mut notes {
             note.html = apply_media_optimizations(&note.html, &materialized_assets.media);
         }
@@ -134,6 +142,7 @@ impl BuildService {
             self.db.log_build("warn", warning)?;
         }
         let site_assets = materialized_assets.records;
+        println!("Building site graph...");
         let site_data = build_site_data(notes, broken_links, site_assets.clone(), reason.clone());
         {
             let mut site = self.site.write().await;
@@ -155,6 +164,7 @@ impl BuildService {
             ),
         )?;
 
+        println!("Rebuild complete.");
         Ok(BuildSummary {
             note_count: self.site.read().await.notes.len(),
             asset_count: site_assets.len(),
