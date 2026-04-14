@@ -69,6 +69,35 @@ async fn setup_with_config(
     (temp, state, router)
 }
 
+#[test]
+fn initialize_does_not_reset_existing_admin_password_without_explicit_sync() {
+    let temp = TempDir::new().unwrap();
+    let db = AppDatabase::open(&temp.path().join("app.db")).unwrap();
+
+    db.initialize("admin", "old-password").unwrap();
+    assert!(db.verify_user("admin", "old-password").unwrap());
+
+    db.initialize("admin", "new-password").unwrap();
+    assert!(db.verify_user("admin", "old-password").unwrap());
+    assert!(!db.verify_user("admin", "new-password").unwrap());
+}
+
+#[test]
+fn explicit_admin_password_sync_updates_existing_admin_password() {
+    let temp = TempDir::new().unwrap();
+    let db = AppDatabase::open(&temp.path().join("app.db")).unwrap();
+
+    db.initialize("admin", "old-password").unwrap();
+    let session = db.create_session("admin", 168).unwrap();
+    assert!(db.session_user(&session.token).unwrap().is_some());
+
+    db.initialize_with_admin_password_sync("admin", "new-password", true)
+        .unwrap();
+    assert!(!db.verify_user("admin", "old-password").unwrap());
+    assert!(db.verify_user("admin", "new-password").unwrap());
+    assert!(db.session_user(&session.token).unwrap().is_none());
+}
+
 fn cookie_header(response: &Response) -> String {
     response
         .headers()
@@ -1683,12 +1712,28 @@ fn note_layout_places_sidebar_left_article_center_and_rail_right() {
     assert!(css.contains(".annotation-rail { grid-area: rail;"));
     assert!(css.contains(".note-layout {\n  display: grid;"));
     assert!(css.contains("min-width: 0;"));
-    assert!(css.contains("overflow-x: hidden;"));
+    assert!(css.contains("overflow-x: clip;"));
+    assert!(css.contains("touch-action: pan-y;"));
     assert!(css.contains(".note-article.interactive-card:hover"));
     assert!(css.contains("transform: none;"));
     assert!(
         css.contains("grid-template-areas:\n      \"article\"\n      \"sidebar\"\n      \"rail\";")
     );
+}
+
+#[test]
+fn note_article_does_not_become_touch_scroll_container() {
+    let css = fs::read_to_string("static/css/app.css").unwrap();
+    let note_article_start = css.find(".note-article {\n").unwrap();
+    let note_article_block = &css
+        [note_article_start..css[note_article_start..].find("}\n").unwrap() + note_article_start];
+
+    assert!(note_article_block.contains("overflow-x: clip;"));
+    assert!(note_article_block.contains("overflow-y: visible;"));
+    assert!(note_article_block.contains("touch-action: pan-y;"));
+    assert!(!note_article_block.contains("overflow-x: hidden;"));
+    assert!(css.contains("@media (hover: none), (pointer: coarse)"));
+    assert!(css.contains(".interactive-card-subtle:hover {\n    transform: none;"));
 }
 
 #[test]
@@ -1863,7 +1908,7 @@ fn annotation_wiring_exists() {
     assert!(css.contains(".video-load-button::before"));
     assert!(css.contains("transform: translate(-50%, -50%);"));
     assert!(css.contains(".note-article {"));
-    assert!(css.contains("overflow-x: hidden;"));
+    assert!(css.contains("overflow-x: clip;"));
     assert!(css.contains(".note-article.interactive-card:hover"));
     assert!(css.contains(".prose :where(img, video, iframe, figure, table, pre)"));
     assert!(css.contains(".video-player-frame"));

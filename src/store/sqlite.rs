@@ -102,6 +102,15 @@ impl AppDatabase {
     }
 
     pub fn initialize(&self, username: &str, password: &str) -> AppResult<()> {
+        self.initialize_with_admin_password_sync(username, password, false)
+    }
+
+    pub fn initialize_with_admin_password_sync(
+        &self,
+        username: &str,
+        password: &str,
+        sync_password: bool,
+    ) -> AppResult<()> {
         let conn = self.conn.lock().expect("db mutex poisoned");
         conn.execute_batch(
             r#"
@@ -174,19 +183,34 @@ impl AppDatabase {
         ensure_video_danmaku_color_column(&conn)?;
         cleanup_expired_sessions(&conn)?;
 
-        let exists: Option<String> = conn
+        let existing_hash: Option<String> = conn
             .query_row(
-                "SELECT username FROM admin_users WHERE username = ?1",
+                "SELECT password_hash FROM admin_users WHERE username = ?1",
                 params![username],
                 |row| row.get(0),
             )
             .optional()?;
-        if exists.is_none() {
-            let hash = hash_password(password)?;
-            conn.execute(
-                "INSERT INTO admin_users(username, password_hash, created_at) VALUES (?1, ?2, ?3)",
-                params![username, hash, Utc::now().to_rfc3339()],
-            )?;
+
+        match existing_hash {
+            Some(hash) if sync_password && !verify_password(&hash, password) => {
+                let next_hash = hash_password(password)?;
+                conn.execute(
+                    "UPDATE admin_users SET password_hash = ?1 WHERE username = ?2",
+                    params![next_hash, username],
+                )?;
+                conn.execute(
+                    "DELETE FROM sessions WHERE username = ?1",
+                    params![username],
+                )?;
+            }
+            Some(_) => {}
+            None => {
+                let hash = hash_password(password)?;
+                conn.execute(
+                    "INSERT INTO admin_users(username, password_hash, created_at) VALUES (?1, ?2, ?3)",
+                    params![username, hash, Utc::now().to_rfc3339()],
+                )?;
+            }
         }
         Ok(())
     }

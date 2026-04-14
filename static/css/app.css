@@ -721,6 +721,29 @@ select:focus-visible {
   transform: translateY(-2px) scale(1.008);
 }
 
+@media (hover: none), (pointer: coarse) {
+  .interactive-card:hover,
+  .card:hover,
+  .list-card:hover,
+  .panel:hover,
+  .note-card:hover,
+  .sidebar-card:hover,
+  .note-hero:hover,
+  .interactive-card-subtle:hover {
+    transform: none;
+  }
+
+  .interactive-card:hover::before,
+  .card:hover::before,
+  .list-card:hover::before,
+  .panel:hover::before,
+  .note-card:hover::before,
+  .sidebar-card:hover::before,
+  .note-hero:hover::before {
+    opacity: 0;
+  }
+}
+
 .build-log li {
   padding: 12px 14px;
   border-radius: 14px;
@@ -908,8 +931,9 @@ select:focus-visible {
   position: relative;
   min-width: 0;
   max-width: 100%;
-  overflow-x: hidden;
+  overflow-x: clip;
   overflow-y: visible;
+  touch-action: pan-y;
 }
 .note-article.interactive-card:hover {
   transform: none;
