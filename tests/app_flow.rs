@@ -1650,6 +1650,20 @@ fn cursor_beacon_is_ring_like_not_filled_disc() {
 }
 
 #[test]
+fn code_copy_button_has_feedback_and_fallback() {
+    let js = fs::read_to_string("static/js/site.js").unwrap();
+    let css = fs::read_to_string("static/css/app.css").unwrap();
+
+    assert!(js.contains("navigator.clipboard?.writeText"));
+    assert!(js.contains("document.execCommand('copy')"));
+    assert!(js.contains("Clipboard API copy failed; falling back"));
+    assert!(js.contains("setCopyButtonFeedback(button, 'Copied', 'copied')"));
+    assert!(js.contains("setCopyButtonFeedback(button, 'Failed', 'copy-failed')"));
+    assert!(js.contains("button.setAttribute('aria-live', 'polite')"));
+    assert!(css.contains(".copy-code-button.copy-failed"));
+}
+
+#[test]
 fn note_sidebar_spacing_and_toc_hover_styles_exist() {
     let css = fs::read_to_string("static/css/app.css").unwrap();
     assert!(css.contains(".sidebar-title-row {\n  margin-bottom: 14px;"));

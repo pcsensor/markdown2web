@@ -273,6 +273,48 @@ function wireCardGlow() {
 }
 
 function wireCodeBlocks() {
+  const restoreCopyButton = (button) => {
+    button.textContent = 'Copy';
+    button.setAttribute('aria-label', 'Copy code');
+    button.classList.remove('copied', 'copy-failed');
+  };
+
+  const setCopyButtonFeedback = (button, label, className) => {
+    button.textContent = label;
+    button.setAttribute('aria-label', label === 'Copied' ? 'Code copied' : 'Copy failed');
+    button.classList.remove('copied', 'copy-failed');
+    button.classList.add(className);
+    window.clearTimeout(button._copyFeedbackTimer);
+    button._copyFeedbackTimer = window.setTimeout(() => restoreCopyButton(button), 1400);
+  };
+
+  const fallbackCopyText = (text) => {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    textarea.style.top = '0';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    const copied = document.execCommand('copy');
+    textarea.remove();
+    if (!copied) throw new Error('document.execCommand copy failed');
+  };
+
+  const copyText = async (text) => {
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return;
+      } catch (error) {
+        console.warn('Clipboard API copy failed; falling back', error);
+      }
+    }
+    fallbackCopyText(text);
+  };
+
   document.querySelectorAll('.prose pre').forEach((block) => {
     if (block.querySelector('.copy-code-button')) return;
     const code = block.querySelector('code');
@@ -283,19 +325,16 @@ function wireCodeBlocks() {
     button.className = 'copy-code-button';
     button.textContent = 'Copy';
     button.setAttribute('aria-label', 'Copy code');
+    button.setAttribute('aria-live', 'polite');
     button.setAttribute('data-skip-annotation', 'true');
 
     button.addEventListener('click', async () => {
       try {
-        await navigator.clipboard.writeText(code.textContent ?? '');
-        button.textContent = 'Copied';
-        button.classList.add('copied');
-        window.setTimeout(() => {
-          button.textContent = 'Copy';
-          button.classList.remove('copied');
-        }, 1400);
+        await copyText(code.textContent ?? '');
+        setCopyButtonFeedback(button, 'Copied', 'copied');
       } catch (error) {
         console.warn('Copy failed', error);
+        setCopyButtonFeedback(button, 'Failed', 'copy-failed');
       }
     });
 
@@ -1535,11 +1574,11 @@ function wireVideoPlayers() {
         controlsTimer = window.setTimeout(() => {
           // 如果焦点在输入框或选择框上（如正在输入弹幕），则不自动隐藏
           const active = document.activeElement;
-          const isInteracting = active && container.contains(active) && (
+          const isInteracting = container.matches(':focus-within') || (active && container.contains(active) && (
             active.tagName === 'INPUT' || 
             active.tagName === 'SELECT' || 
             active.tagName === 'TEXTAREA'
-          );
+          ));
           if (!isInteracting) {
             container.classList.remove('is-controls-visible');
           }

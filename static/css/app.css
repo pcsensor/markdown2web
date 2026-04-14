@@ -786,6 +786,10 @@ select:focus-visible {
 .copy-code-button.copied {
   background: rgba(20, 184, 166, 0.9);
 }
+
+.copy-code-button.copy-failed {
+  background: rgba(220, 38, 38, 0.9);
+}
 .arrow-badge {
   display: inline-flex;
   align-items: center;
