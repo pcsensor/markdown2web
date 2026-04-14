@@ -1502,14 +1502,12 @@ async fn danmaku_api_allows_public_list_and_requires_login_to_post() {
 
     let user_cookie =
         public_register(&router, "danmaku-user", "ReaderPass123", "/notes/welcome").await;
-    let user_csrf = note_csrf(&router, &user_cookie, "welcome").await;
 
     let create_request = Request::builder()
         .method("POST")
         .uri("/api/notes/welcome/danmaku")
         .header(header::CONTENT_TYPE, "application/json")
         .header(header::COOKIE, &user_cookie)
-        .header("x-csrf-token", &user_csrf)
         .body(Body::from(
             json!({
                 "video_src": video_key,
@@ -1964,10 +1962,7 @@ fn annotation_wiring_exists() {
     assert!(js.contains("data-video-danmaku-status"));
     assert!(js.contains("setDanmakuStatus('发送中…', 'pending')"));
     assert!(js.contains("setDanmakuStatus('已发送', 'success')"));
-    assert!(js.contains("if (!csrfToken)"));
-    assert!(js.contains("credentials: 'same-origin'"));
     assert!(js.contains("Danmaku send failed"));
-    assert!(js.contains("登录状态已过期，请刷新页面后重试"));
     assert!(js.contains("showDanmaku"));
     assert!(js.contains("syncDanmaku(true);"));
     assert!(js.contains("video.addEventListener('seeking'"));

@@ -494,26 +494,17 @@ pub async fn create_danmaku(
     Path(slug): Path<String>,
     State(state): State<AppState>,
     jar: CookieJar,
-    headers: HeaderMap,
     Json(payload): Json<CreateDanmakuPayload>,
 ) -> AppResult<Response> {
     ensure_published_note(&state, &slug).await?;
-    let session = auth::current_viewer_session(&jar, &state)?.ok_or(AppError::Unauthorized)?;
-    csrf::verify_header(&headers, &session.csrf_token)?;
-    rate_limit::check(
-        &state,
-        "api-danmaku",
-        &session.username,
-        &headers,
-        rate_limit::API_WRITE_LIMIT,
-        rate_limit::API_WRITE_WINDOW_SECS,
-    )?;
+    let (username, _is_admin) =
+        auth::current_viewer(&jar, &state)?.ok_or(AppError::Unauthorized)?;
     let (full_src, _filename) = normalize_video_src(payload.video_src)?;
     let body = normalize_danmaku_body(payload.body)?;
     let color = normalize_color(payload.color)?.unwrap_or_else(|| "#ffffff".into());
     validate_danmaku_time(payload.time_ms)?;
     let record = state.db.create_video_danmaku(NewVideoDanmaku {
-        username: &session.username,
+        username: &username,
         note_slug: &slug,
         video_src: &full_src,
         time_ms: payload.time_ms,

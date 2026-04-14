@@ -1909,10 +1909,6 @@ function wireVideoPlayers() {
         setDanmakuStatus('视频还没准备好，请稍后再试', 'error');
         return;
       }
-      if (!csrfToken) {
-        setDanmakuStatus('登录状态已过期，请刷新页面后重试', 'error');
-        return;
-      }
       const body = danmakuInput.value.trim();
       if (!body) return;
       const submitButton = danmakuForm.querySelector('button[type="submit"]');
@@ -1927,20 +1923,14 @@ function wireVideoPlayers() {
       try {
         const response = await fetch(`/api/notes/${encodeURIComponent(noteSlug)}/danmaku`, {
           method: 'POST',
-          credentials: 'same-origin',
           headers: {
             'Content-Type': 'application/json',
             Accept: 'application/json',
-            'X-CSRF-Token': csrfToken,
           },
           body: JSON.stringify(payload),
         });
         if (response.status === 401) {
           window.location.href = accountUrl;
-          return;
-        }
-        if (response.status === 400 || response.status === 403) {
-          setDanmakuStatus('登录状态已过期，请刷新页面后重试', 'error');
           return;
         }
         if (!response.ok) {
