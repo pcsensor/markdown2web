@@ -11,7 +11,3 @@ aliases: []
 ## 我喜欢我望向别处时，他落在我身上的目光
 
 @[lover](../assets/love.mp4)
-
-## Belief
-
-@[belief](../assets/belief.mp4)

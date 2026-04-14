@@ -3,7 +3,6 @@ use std::{env, fs, path::PathBuf};
 use crate::error::AppResult;
 
 const DEFAULT_UPLOAD_LIMIT_MB: usize = 128;
-const DEFAULT_SESSION_TTL_HOURS: i64 = 168;
 
 #[derive(Debug, Clone)]
 pub struct AppConfig {
@@ -21,8 +20,6 @@ pub struct AppConfig {
     pub admin_password: String,
     pub watch_enabled: bool,
     pub turnstile_enabled: bool,
-    pub secure_cookies: bool,
-    pub session_ttl_hours: i64,
     pub upload_limit_mb: usize,
     pub turnstile_site_key: String,
     pub turnstile_secret_key: String,
@@ -62,14 +59,6 @@ impl AppConfig {
             turnstile_enabled: env::var("M2W_TURNSTILE_ENABLED")
                 .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "on"))
                 .unwrap_or(false), // 默认设为 false 更安全，且方便本地测试
-            secure_cookies: env::var("M2W_SECURE_COOKIES")
-                .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "on"))
-                .unwrap_or(false),
-            session_ttl_hours: env::var("M2W_SESSION_TTL_HOURS")
-                .ok()
-                .and_then(|value| value.parse::<i64>().ok())
-                .filter(|value| *value > 0)
-                .unwrap_or(DEFAULT_SESSION_TTL_HOURS),
             upload_limit_mb: env::var("M2W_UPLOAD_LIMIT_MB")
                 .ok()
                 .and_then(|value| value.parse().ok())

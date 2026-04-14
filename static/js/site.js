@@ -49,8 +49,7 @@ function wireRevealAnimations() {
     '.panel',
     '.auth-copy',
   ];
-  const elements = [...new Set(selectors.flatMap((selector) => Array.from(document.querySelectorAll(selector))))]
-    .filter((element) => !element.hasAttribute('data-note-article'));
+  const elements = [...new Set(selectors.flatMap((selector) => Array.from(document.querySelectorAll(selector))))];
 
   if (prefersReducedMotion()) {
     elements.forEach((element) => element.classList.add('is-visible'));
@@ -274,48 +273,6 @@ function wireCardGlow() {
 }
 
 function wireCodeBlocks() {
-  const restoreCopyButton = (button) => {
-    button.textContent = 'Copy';
-    button.setAttribute('aria-label', 'Copy code');
-    button.classList.remove('copied', 'copy-failed');
-  };
-
-  const setCopyButtonFeedback = (button, label, className) => {
-    button.textContent = label;
-    button.setAttribute('aria-label', label === 'Copied' ? 'Code copied' : 'Copy failed');
-    button.classList.remove('copied', 'copy-failed');
-    button.classList.add(className);
-    window.clearTimeout(button._copyFeedbackTimer);
-    button._copyFeedbackTimer = window.setTimeout(() => restoreCopyButton(button), 1400);
-  };
-
-  const fallbackCopyText = (text) => {
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    textarea.setAttribute('readonly', '');
-    textarea.style.position = 'fixed';
-    textarea.style.left = '-9999px';
-    textarea.style.top = '0';
-    document.body.appendChild(textarea);
-    textarea.focus();
-    textarea.select();
-    const copied = document.execCommand('copy');
-    textarea.remove();
-    if (!copied) throw new Error('document.execCommand copy failed');
-  };
-
-  const copyText = async (text) => {
-    if (navigator.clipboard?.writeText) {
-      try {
-        await navigator.clipboard.writeText(text);
-        return;
-      } catch (error) {
-        console.warn('Clipboard API copy failed; falling back', error);
-      }
-    }
-    fallbackCopyText(text);
-  };
-
   document.querySelectorAll('.prose pre').forEach((block) => {
     if (block.querySelector('.copy-code-button')) return;
     const code = block.querySelector('code');
@@ -326,16 +283,19 @@ function wireCodeBlocks() {
     button.className = 'copy-code-button';
     button.textContent = 'Copy';
     button.setAttribute('aria-label', 'Copy code');
-    button.setAttribute('aria-live', 'polite');
     button.setAttribute('data-skip-annotation', 'true');
 
     button.addEventListener('click', async () => {
       try {
-        await copyText(code.textContent ?? '');
-        setCopyButtonFeedback(button, 'Copied', 'copied');
+        await navigator.clipboard.writeText(code.textContent ?? '');
+        button.textContent = 'Copied';
+        button.classList.add('copied');
+        window.setTimeout(() => {
+          button.textContent = 'Copy';
+          button.classList.remove('copied');
+        }, 1400);
       } catch (error) {
         console.warn('Copy failed', error);
-        setCopyButtonFeedback(button, 'Failed', 'copy-failed');
       }
     });
 
@@ -388,7 +348,6 @@ function wireNoteAnnotations() {
   const viewerUsername = article.dataset.viewerUsername || '';
   const isAdmin = article.dataset.isAdmin === 'true';
   const enabled = article.dataset.annotationEnabled === 'true';
-  const csrfToken = article.dataset.csrfToken || '';
   const highlightButton = toolbar.querySelector('[data-annotation-highlight]');
   const commentButton = toolbar.querySelector('[data-annotation-comment]');
   const deleteCommentButton = toolbar.querySelector('[data-annotation-delete-comment]');
@@ -810,7 +769,6 @@ const updateToolbarState = () => {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
-        'X-CSRF-Token': csrfToken,
       },
       body: JSON.stringify(payload),
     });
@@ -830,7 +788,7 @@ const updateToolbarState = () => {
   const deleteAnnotation = async (annotationId) => {
     const response = await fetch(`/api/annotations/${annotationId}`, {
       method: 'DELETE',
-      headers: { Accept: 'application/json', 'X-CSRF-Token': csrfToken },
+      headers: { Accept: 'application/json' },
     });
     if (response.status === 401) {
       window.location.href = accountUrl;
@@ -1019,40 +977,14 @@ const updateToolbarState = () => {
     button.addEventListener('click', () => closeCommentModal(null));
   });
 
-  let touchStartX = 0;
-  let touchStartY = 0;
-  let touchMoved = false;
-  const touchMoveThreshold = 8;
-
   root.addEventListener('mouseup', (event) => {
     // 忽略右键释放，避免与 contextmenu 冲突
     if (event.button === 2) return;
     window.setTimeout(showSelectionToolbar, 0);
   });
-
-  root.addEventListener('touchstart', (event) => {
-    const touch = event.changedTouches?.[0];
-    if (!touch) return;
-    touchStartX = touch.clientX;
-    touchStartY = touch.clientY;
-    touchMoved = false;
-  }, { passive: true });
-
-  root.addEventListener('touchmove', (event) => {
-    const touch = event.changedTouches?.[0];
-    if (!touch) return;
-    const movedX = Math.abs(touch.clientX - touchStartX);
-    const movedY = Math.abs(touch.clientY - touchStartY);
-    if (movedX > touchMoveThreshold || movedY > touchMoveThreshold) {
-      touchMoved = true;
-      hideToolbar();
-    }
-  }, { passive: true });
-
   root.addEventListener('touchend', () => {
-    if (touchMoved) return;
     window.setTimeout(showSelectionToolbar, 0);
-  }, { passive: true });
+  });
 
   const openOwnedAnnotationPanel = (annotationElement, forceNew = false) => {
     window.getSelection()?.removeAllRanges();
@@ -1540,7 +1472,6 @@ function wireVideoPlayers() {
     const danmakuForm = container.querySelector('[data-video-danmaku-form]');
     const danmakuInput = container.querySelector('[data-video-danmaku-input]');
     const danmakuColor = container.querySelector('[data-video-danmaku-color]');
-    const danmakuStatus = container.querySelector('[data-video-danmaku-status]');
     const danmakuLogin = container.querySelector('[data-video-danmaku-login]');
     const article = container.closest('[data-note-article]');
     if (!video || !source || video.dataset.videoWired === 'true') return;
@@ -1600,14 +1531,7 @@ function wireVideoPlayers() {
       // 如果视频正在播放且不是强制常驻模式，开启自动隐藏定时器
       if (!sticky && !video.paused && !video.ended) {
         controlsTimer = window.setTimeout(() => {
-          // 如果焦点在输入框或选择框上（如正在输入弹幕），则不自动隐藏
-          const active = document.activeElement;
-          const isInteracting = container.matches(':focus-within') || (active && container.contains(active) && (
-            active.tagName === 'INPUT' || 
-            active.tagName === 'SELECT' || 
-            active.tagName === 'TEXTAREA'
-          ));
-          if (!isInteracting) {
+          if (!container.matches(':focus-within')) {
             container.classList.remove('is-controls-visible');
           }
         }, 2500);
@@ -1660,22 +1584,6 @@ function wireVideoPlayers() {
       danmakuState.items = data.danmaku || [];
       danmakuState.loaded = true;
       syncDanmaku(true);
-    };
-
-    const setDanmakuStatus = (message, kind = '') => {
-      if (!danmakuStatus) return;
-      danmakuStatus.textContent = message;
-      danmakuStatus.dataset.status = kind;
-    };
-
-    const parseErrorMessage = async (response) => {
-      try {
-        const data = await response.clone().json();
-        return data?.message || data?.error || `发送失败（${response.status}）`;
-      } catch (_error) {
-        const text = await response.text().catch(() => '');
-        return text || `发送失败（${response.status}）`;
-      }
     };
 
     const loadVideo = async (autoplay = false) => {
@@ -1854,9 +1762,6 @@ function wireVideoPlayers() {
     container.addEventListener('pointermove', () => {
       showControls();
     });
-    container.addEventListener('focusin', () => {
-      showControls();
-    });
     container.addEventListener('pointerleave', () => {
       if (!video.paused && !video.ended) {
         window.clearTimeout(controlsTimer);
@@ -1901,55 +1806,33 @@ function wireVideoPlayers() {
 
     danmakuForm?.addEventListener('submit', async (event) => {
       event.preventDefault();
-      if (!danmakuEnabled) {
-        window.location.href = accountUrl;
-        return;
-      }
-      if (!danmakuInput || !noteSlug || !videoKey) {
-        setDanmakuStatus('视频还没准备好，请稍后再试', 'error');
-        return;
-      }
+      if (!danmakuEnabled || !danmakuInput || !noteSlug || !videoKey) return;
       const body = danmakuInput.value.trim();
       if (!body) return;
-      const submitButton = danmakuForm.querySelector('button[type="submit"]');
-      if (submitButton) submitButton.disabled = true;
-      setDanmakuStatus('发送中…', 'pending');
       const payload = {
         video_src: videoKey,
         time_ms: Math.max(0, Math.floor(video.currentTime * 1000)),
         body,
         color: danmakuColor?.value || '#ffffff',
       };
-      try {
-        const response = await fetch(`/api/notes/${encodeURIComponent(noteSlug)}/danmaku`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-          },
-          body: JSON.stringify(payload),
-        });
-        if (response.status === 401) {
-          window.location.href = accountUrl;
-          return;
-        }
-        if (!response.ok) {
-          setDanmakuStatus(await parseErrorMessage(response), 'error');
-          return;
-        }
-        const created = await response.json();
-        danmakuInput.value = '';
-        danmakuState.loaded = true;
-        danmakuState.items.push(created);
-        danmakuState.shown.add(created.id);
-        showDanmaku(created);
-        setDanmakuStatus('已发送', 'success');
-      } catch (error) {
-        console.warn('Danmaku send failed', error);
-        setDanmakuStatus('网络异常，发送失败', 'error');
-      } finally {
-        if (submitButton) submitButton.disabled = false;
+      const response = await fetch(`/api/notes/${encodeURIComponent(noteSlug)}/danmaku`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+      if (response.status === 401) {
+        window.location.href = accountUrl;
+        return;
       }
+      if (!response.ok) return;
+      const created = await response.json();
+      danmakuInput.value = '';
+      danmakuState.items.push(created);
+      danmakuState.shown.add(created.id);
+      showDanmaku(created);
     });
 
     updateControls();

@@ -10,12 +10,7 @@ async fn main() -> anyhow::Result<()> {
     config.ensure_directories()?;
 
     let db = Arc::new(AppDatabase::open(&config.database_path())?);
-    let sync_admin_password = std::env::var_os("M2W_ADMIN_PASSWORD").is_some();
-    db.initialize_with_admin_password_sync(
-        &config.admin_username,
-        &config.admin_password,
-        sync_admin_password,
-    )?;
+    db.initialize(&config.admin_username, &config.admin_password)?;
 
     let state = app::AppState::bootstrap(config.clone(), db).await?;
     if config.watch_enabled {

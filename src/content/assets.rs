@@ -637,8 +637,6 @@ mod tests {
             admin_password: "admin123456".into(),
             watch_enabled: false,
             turnstile_enabled: false,
-            secure_cookies: false,
-            session_ttl_hours: 168,
             upload_limit_mb: 10,
             turnstile_site_key: String::new(),
             turnstile_secret_key: String::new(),

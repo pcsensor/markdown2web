@@ -4,7 +4,7 @@ use argon2::{
     Argon2,
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
 };
-use chrono::{Duration, Utc};
+use chrono::Utc;
 use rand::{Rng, distributions::Alphanumeric};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
@@ -57,18 +57,6 @@ pub struct ManagedPublicUser {
     pub annotation_count: usize,
 }
 
-#[derive(Debug, Clone)]
-pub struct CreatedSession {
-    pub token: String,
-    pub csrf_token: String,
-}
-
-#[derive(Debug, Clone)]
-pub struct SessionRecord {
-    pub username: String,
-    pub csrf_token: String,
-}
-
 pub struct NewAnnotation<'a> {
     pub username: &'a str,
     pub note_slug: &'a str,
@@ -102,15 +90,6 @@ impl AppDatabase {
     }
 
     pub fn initialize(&self, username: &str, password: &str) -> AppResult<()> {
-        self.initialize_with_admin_password_sync(username, password, false)
-    }
-
-    pub fn initialize_with_admin_password_sync(
-        &self,
-        username: &str,
-        password: &str,
-        sync_password: bool,
-    ) -> AppResult<()> {
         let conn = self.conn.lock().expect("db mutex poisoned");
         conn.execute_batch(
             r#"
@@ -122,8 +101,6 @@ impl AppDatabase {
             CREATE TABLE IF NOT EXISTS sessions (
                 token TEXT PRIMARY KEY,
                 username TEXT NOT NULL,
-                csrf_token TEXT NOT NULL,
-                expires_at TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS build_events (
@@ -140,8 +117,6 @@ impl AppDatabase {
             CREATE TABLE IF NOT EXISTS user_sessions (
                 token TEXT PRIMARY KEY,
                 username TEXT NOT NULL,
-                csrf_token TEXT NOT NULL,
-                expires_at TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS annotations (
@@ -170,47 +145,24 @@ impl AppDatabase {
             );
             CREATE INDEX IF NOT EXISTS idx_video_danmaku_lookup
                 ON video_danmaku(note_slug, video_src, time_ms, id);
-            CREATE TABLE IF NOT EXISTS rate_limits (
-                key TEXT PRIMARY KEY,
-                window_start INTEGER NOT NULL,
-                attempts INTEGER NOT NULL
-            );
             "#,
         )?;
-        ensure_session_security_columns(&conn, "sessions")?;
-        ensure_session_security_columns(&conn, "user_sessions")?;
         ensure_annotations_visibility_column(&conn)?;
         ensure_video_danmaku_color_column(&conn)?;
-        cleanup_expired_sessions(&conn)?;
 
-        let existing_hash: Option<String> = conn
+        let exists: Option<String> = conn
             .query_row(
-                "SELECT password_hash FROM admin_users WHERE username = ?1",
+                "SELECT username FROM admin_users WHERE username = ?1",
                 params![username],
                 |row| row.get(0),
             )
             .optional()?;
-
-        match existing_hash {
-            Some(hash) if sync_password && !verify_password(&hash, password) => {
-                let next_hash = hash_password(password)?;
-                conn.execute(
-                    "UPDATE admin_users SET password_hash = ?1 WHERE username = ?2",
-                    params![next_hash, username],
-                )?;
-                conn.execute(
-                    "DELETE FROM sessions WHERE username = ?1",
-                    params![username],
-                )?;
-            }
-            Some(_) => {}
-            None => {
-                let hash = hash_password(password)?;
-                conn.execute(
-                    "INSERT INTO admin_users(username, password_hash, created_at) VALUES (?1, ?2, ?3)",
-                    params![username, hash, Utc::now().to_rfc3339()],
-                )?;
-            }
+        if exists.is_none() {
+            let hash = hash_password(password)?;
+            conn.execute(
+                "INSERT INTO admin_users(username, password_hash, created_at) VALUES (?1, ?2, ?3)",
+                params![username, hash, Utc::now().to_rfc3339()],
+            )?;
         }
         Ok(())
     }
@@ -321,77 +273,53 @@ impl AppDatabase {
         Ok(updated > 0)
     }
 
-    pub fn create_session(&self, username: &str, ttl_hours: i64) -> AppResult<CreatedSession> {
+    pub fn create_session(&self, username: &str) -> AppResult<String> {
         let conn = self.conn.lock().expect("db mutex poisoned");
         let token: String = rand::thread_rng()
             .sample_iter(&Alphanumeric)
             .take(48)
             .map(char::from)
             .collect();
-        let csrf_token = random_token(64);
-        let now = Utc::now();
-        let expires_at = now + Duration::hours(ttl_hours);
         conn.execute(
-            "INSERT INTO sessions(token, username, csrf_token, expires_at, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![
-                token,
-                username,
-                csrf_token,
-                expires_at.to_rfc3339(),
-                now.to_rfc3339()
-            ],
+            "INSERT INTO sessions(token, username, created_at) VALUES (?1, ?2, ?3)",
+            params![token, username, Utc::now().to_rfc3339()],
         )?;
-        Ok(CreatedSession { token, csrf_token })
+        Ok(token)
     }
 
-    pub fn create_public_session(
-        &self,
-        username: &str,
-        ttl_hours: i64,
-    ) -> AppResult<CreatedSession> {
+    pub fn create_public_session(&self, username: &str) -> AppResult<String> {
         let conn = self.conn.lock().expect("db mutex poisoned");
         let token: String = rand::thread_rng()
             .sample_iter(&Alphanumeric)
             .take(48)
             .map(char::from)
             .collect();
-        let csrf_token = random_token(64);
-        let now = Utc::now();
-        let expires_at = now + Duration::hours(ttl_hours);
         conn.execute(
-            "INSERT INTO user_sessions(token, username, csrf_token, expires_at, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![
-                token,
-                username,
-                csrf_token,
-                expires_at.to_rfc3339(),
-                now.to_rfc3339()
-            ],
+            "INSERT INTO user_sessions(token, username, created_at) VALUES (?1, ?2, ?3)",
+            params![token, username, Utc::now().to_rfc3339()],
         )?;
-        Ok(CreatedSession { token, csrf_token })
+        Ok(token)
     }
 
-    pub fn session_user(&self, token: &str) -> AppResult<Option<SessionRecord>> {
+    pub fn session_user(&self, token: &str) -> AppResult<Option<String>> {
         let conn = self.conn.lock().expect("db mutex poisoned");
-        cleanup_expired_sessions(&conn)?;
         let user = conn
             .query_row(
-                "SELECT username, csrf_token FROM sessions WHERE token = ?1 AND expires_at > ?2 AND csrf_token IS NOT NULL",
-                params![token, Utc::now().to_rfc3339()],
-                session_record_from_row,
+                "SELECT username FROM sessions WHERE token = ?1",
+                params![token],
+                |row| row.get(0),
             )
             .optional()?;
         Ok(user)
     }
 
-    pub fn public_session_user(&self, token: &str) -> AppResult<Option<SessionRecord>> {
+    pub fn public_session_user(&self, token: &str) -> AppResult<Option<String>> {
         let conn = self.conn.lock().expect("db mutex poisoned");
-        cleanup_expired_sessions(&conn)?;
         let user = conn
             .query_row(
-                "SELECT username, csrf_token FROM user_sessions WHERE token = ?1 AND expires_at > ?2 AND csrf_token IS NOT NULL",
-                params![token, Utc::now().to_rfc3339()],
-                session_record_from_row,
+                "SELECT username FROM user_sessions WHERE token = ?1",
+                params![token],
+                |row| row.get(0),
             )
             .optional()?;
         Ok(user)
@@ -703,61 +631,6 @@ impl AppDatabase {
         })?;
         Ok(rows.filter_map(Result::ok).collect())
     }
-
-    pub fn check_rate_limit(&self, key: &str, limit: i64, window_secs: i64) -> AppResult<()> {
-        let mut conn = self.conn.lock().expect("db mutex poisoned");
-        let now = Utc::now().timestamp();
-        let oldest_window = now - window_secs;
-        let tx = conn.transaction()?;
-        tx.execute(
-            "DELETE FROM rate_limits WHERE window_start < ?1",
-            params![oldest_window],
-        )?;
-
-        let existing: Option<(i64, i64)> = tx
-            .query_row(
-                "SELECT window_start, attempts FROM rate_limits WHERE key = ?1",
-                params![key],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            )
-            .optional()?;
-
-        match existing {
-            Some((window_start, attempts)) if now - window_start < window_secs => {
-                if attempts >= limit {
-                    tx.commit()?;
-                    return Err(AppError::RateLimited("too many requests".into()));
-                }
-                tx.execute(
-                    "UPDATE rate_limits SET attempts = attempts + 1 WHERE key = ?1",
-                    params![key],
-                )?;
-            }
-            _ => {
-                tx.execute(
-                    r#"
-                    INSERT INTO rate_limits(key, window_start, attempts)
-                    VALUES (?1, ?2, 1)
-                    ON CONFLICT(key) DO UPDATE SET
-                        window_start = excluded.window_start,
-                        attempts = excluded.attempts
-                    "#,
-                    params![key, now],
-                )?;
-            }
-        }
-
-        tx.commit()?;
-        Ok(())
-    }
-}
-
-fn random_token(length: usize) -> String {
-    rand::thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(length)
-        .map(char::from)
-        .collect()
 }
 
 fn hash_password(password: &str) -> AppResult<String> {
@@ -794,13 +667,6 @@ fn annotation_by_id(
     )
     .optional()
     .map_err(Into::into)
-}
-
-fn session_record_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionRecord> {
-    Ok(SessionRecord {
-        username: row.get(0)?,
-        csrf_token: row.get(1)?,
-    })
 }
 
 fn annotation_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<NoteAnnotation> {
@@ -869,39 +735,20 @@ fn managed_public_user_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Man
     })
 }
 
-fn ensure_session_security_columns(conn: &Connection, table: &str) -> AppResult<()> {
-    let columns = table_columns(conn, table)?;
-    if !columns.iter().any(|column| column == "csrf_token") {
-        conn.execute(
-            &format!("ALTER TABLE {table} ADD COLUMN csrf_token TEXT"),
-            [],
-        )?;
-    }
-    if !columns.iter().any(|column| column == "expires_at") {
-        conn.execute(
-            &format!("ALTER TABLE {table} ADD COLUMN expires_at TEXT"),
-            [],
-        )?;
-    }
-    Ok(())
-}
-
-fn cleanup_expired_sessions(conn: &Connection) -> AppResult<()> {
-    let now = Utc::now().to_rfc3339();
-    conn.execute(
-        "DELETE FROM sessions WHERE expires_at IS NULL OR expires_at <= ?1 OR csrf_token IS NULL",
-        params![now],
-    )?;
-    conn.execute(
-        "DELETE FROM user_sessions WHERE expires_at IS NULL OR expires_at <= ?1 OR csrf_token IS NULL",
-        params![now],
-    )?;
-    Ok(())
-}
-
 fn ensure_annotations_visibility_column(conn: &Connection) -> AppResult<()> {
-    let columns = table_columns(conn, "annotations")?;
-    if !columns.iter().any(|column| column == "visibility") {
+    let mut stmt = conn.prepare("PRAGMA table_info(annotations)")?;
+    let mut rows = stmt.query([])?;
+    let mut has_visibility = false;
+
+    while let Some(row) = rows.next()? {
+        let name: String = row.get(1)?;
+        if name == "visibility" {
+            has_visibility = true;
+            break;
+        }
+    }
+
+    if !has_visibility {
         conn.execute(
             "ALTER TABLE annotations ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private'",
             [],
@@ -912,8 +759,19 @@ fn ensure_annotations_visibility_column(conn: &Connection) -> AppResult<()> {
 }
 
 fn ensure_video_danmaku_color_column(conn: &Connection) -> AppResult<()> {
-    let columns = table_columns(conn, "video_danmaku")?;
-    if !columns.iter().any(|column| column == "color") {
+    let mut stmt = conn.prepare("PRAGMA table_info(video_danmaku)")?;
+    let mut rows = stmt.query([])?;
+    let mut has_color = false;
+
+    while let Some(row) = rows.next()? {
+        let name: String = row.get(1)?;
+        if name == "color" {
+            has_color = true;
+            break;
+        }
+    }
+
+    if !has_color {
         conn.execute(
             "ALTER TABLE video_danmaku ADD COLUMN color TEXT NOT NULL DEFAULT '#ffffff'",
             [],
@@ -921,19 +779,6 @@ fn ensure_video_danmaku_color_column(conn: &Connection) -> AppResult<()> {
     }
 
     Ok(())
-}
-
-fn table_columns(conn: &Connection, table: &str) -> AppResult<Vec<String>> {
-    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
-    let mut rows = stmt.query([])?;
-    let mut columns = Vec::new();
-
-    while let Some(row) = rows.next()? {
-        let name: String = row.get(1)?;
-        columns.push(name);
-    }
-
-    Ok(columns)
 }
 
 fn percent_encode_component(value: &str) -> String {

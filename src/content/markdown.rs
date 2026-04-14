@@ -160,8 +160,6 @@ fn video_mime_type(src: &str) -> &'static str {
 fn restore_audio_blocks(html: &str, audio_embeds: &[AudioEmbed]) -> String {
     let mut output = html.to_string();
     for embed in audio_embeds {
-        let label = escape_html_text(&embed.label);
-        let src = escape_html_attr(&embed.src);
         let player = format!(
             r#"<div class="audio-player" data-audio-player>
                 <div class="audio-player-inner">
@@ -186,7 +184,7 @@ fn restore_audio_blocks(html: &str, audio_embeds: &[AudioEmbed]) -> String {
                     </audio>
                 </div>
             </div>"#,
-            label, src, embed.mime_type
+            embed.label, embed.src, embed.mime_type
         );
         output = output.replace(&format!("<p>{}</p>\n", embed.token), &player);
         output = output.replace(&format!("<p>{}</p>", embed.token), &player);
@@ -198,9 +196,6 @@ fn restore_audio_blocks(html: &str, audio_embeds: &[AudioEmbed]) -> String {
 fn restore_video_blocks(html: &str, video_embeds: &[VideoEmbed]) -> String {
     let mut output = html.to_string();
     for embed in video_embeds {
-        let label = escape_html_text(&embed.label);
-        let src = escape_html_attr(&embed.src);
-        let danmaku_key = escape_html_attr(&embed.danmaku_key);
         let player = format!(
             r##"<figure class="video-player" data-video-player>
                 <div class="video-player-frame">
@@ -248,32 +243,18 @@ fn restore_video_blocks(html: &str, video_embeds: &[VideoEmbed]) -> String {
                             <input type="color" class="video-danmaku-color" data-video-danmaku-color value="#ffffff" aria-label="弹幕颜色" />
                             <input type="text" data-video-danmaku-input maxlength="80" placeholder="登录后发送弹幕" />
                             <button type="submit" data-static-button>发送</button>
-                            <span class="video-danmaku-status" data-video-danmaku-status role="status" aria-live="polite"></span>
                         </form>
                         <a class="video-danmaku-login" data-video-danmaku-login href="/account">登录后发送弹幕</a>
                     </div>
                 </div>
             </figure>"##,
-            src, embed.mime_type, danmaku_key, src, embed.mime_type, label
+            embed.src, embed.mime_type, embed.danmaku_key, embed.src, embed.mime_type, embed.label
         );
         output = output.replace(&format!("<p>{}</p>\n", embed.token), &player);
         output = output.replace(&format!("<p>{}</p>", embed.token), &player);
         output = output.replace(&embed.token, &player);
     }
     output
-}
-
-fn escape_html_text(value: &str) -> String {
-    value
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-}
-
-fn escape_html_attr(value: &str) -> String {
-    escape_html_text(value)
-        .replace('"', "&quot;")
-        .replace('\'', "&#x27;")
 }
 
 fn extract_headings_from_html(html: &str) -> Vec<Heading> {

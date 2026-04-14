@@ -103,7 +103,6 @@
       
       const formData = new FormData(form);
       const xhr = new XMLHttpRequest();
-      const csrfToken = form.querySelector('input[name="_csrf"]')?.value || '';
 
       container.style.display = 'flex';
       bar.style.width = '0%';
@@ -139,9 +138,6 @@
       });
 
       xhr.open('POST', form.action);
-      if (csrfToken) {
-        xhr.setRequestHeader('X-CSRF-Token', csrfToken);
-      }
       xhr.send(formData);
     });
   }

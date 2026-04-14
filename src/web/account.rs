@@ -2,7 +2,7 @@ use askama::Template;
 use axum::{
     Form, Json,
     extract::{Path, Query, State},
-    http::{HeaderMap, StatusCode},
+    http::StatusCode,
     response::{Html, IntoResponse, Redirect, Response},
 };
 use axum_extra::extract::cookie::CookieJar;
@@ -12,7 +12,7 @@ use crate::{
     app::AppState,
     error::{AppError, AppResult},
     store::sqlite::{NewAnnotation, NewVideoDanmaku, NoteAnnotation, VideoDanmaku},
-    web::{auth, csrf, rate_limit, turnstile},
+    web::{auth, turnstile},
 };
 
 #[derive(Template)]
@@ -27,7 +27,6 @@ struct AccountTemplate {
     register_error: Option<String>,
     turnstile_enabled: bool,
     turnstile_site_key: String,
-    csrf_token: String,
 }
 
 #[derive(Default, Deserialize)]
@@ -41,9 +40,6 @@ pub struct LoginForm {
     password: String,
     next: Option<String>,
     #[serde(default)]
-    #[serde(rename = "_csrf")]
-    csrf_token: String,
-    #[serde(default)]
     #[serde(rename = "cf-turnstile-response")]
     cf_turnstile_response: Option<String>,
 }
@@ -54,9 +50,6 @@ pub struct RegisterForm {
     password: String,
     next: Option<String>,
     #[serde(default)]
-    #[serde(rename = "_csrf")]
-    csrf_token: String,
-    #[serde(default)]
     #[serde(rename = "cf-turnstile-response")]
     cf_turnstile_response: Option<String>,
 }
@@ -64,9 +57,6 @@ pub struct RegisterForm {
 #[derive(Deserialize)]
 pub struct LogoutForm {
     next: Option<String>,
-    #[serde(default)]
-    #[serde(rename = "_csrf")]
-    csrf_token: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -114,57 +104,26 @@ pub async fn account_page(
     jar: CookieJar,
     Query(query): Query<AccountQuery>,
 ) -> AppResult<Response> {
-    let next = normalize_next(query.next.as_deref(), "/account");
-    if let Some(session) = auth::current_public_session(&jar, &state)? {
-        return render_account(
-            &state,
-            Some(session.username),
-            next,
-            String::new(),
-            String::new(),
-            None,
-            None,
-            session.csrf_token,
-        );
-    }
-
-    let csrf_token = csrf::generate_token();
-    let response = render_account(
+    render_account(
         &state,
-        None,
-        next,
+        auth::current_public_user(&jar, &state)?,
+        normalize_next(query.next.as_deref(), "/account"),
         String::new(),
         String::new(),
         None,
         None,
-        csrf_token.clone(),
-    )?;
-    Ok((
-        jar.add(csrf::build_pre_auth_cookie(csrf_token, &state.config)),
-        response,
     )
-        .into_response())
 }
 
 pub async fn register(
     State(state): State<AppState>,
     jar: CookieJar,
-    headers: HeaderMap,
     Form(form): Form<RegisterForm>,
 ) -> AppResult<Response> {
     let next = normalize_next(form.next.as_deref(), "/account");
     if auth::current_public_user(&jar, &state)?.is_some() {
         return Ok(Redirect::to(&next).into_response());
     }
-    csrf::verify_pre_auth(&jar, &form.csrf_token)?;
-    rate_limit::check(
-        &state,
-        "account-register",
-        &form.username,
-        &headers,
-        rate_limit::PUBLIC_AUTH_LIMIT,
-        rate_limit::PUBLIC_AUTH_WINDOW_SECS,
-    )?;
 
     let token = form.cf_turnstile_response.as_deref().unwrap_or_default();
     match turnstile::verify_turnstile(token, &state.config, None).await {
@@ -178,7 +137,6 @@ pub async fn register(
                 form.username.trim().to_string(),
                 None,
                 Some("人机验证失败，请重试。".into()),
-                form.csrf_token,
             );
         }
         Err(err) => {
@@ -190,7 +148,6 @@ pub async fn register(
                 form.username.trim().to_string(),
                 None,
                 Some(format!("人机验证异常：{err}")),
-                form.csrf_token,
             );
         }
     }
@@ -205,7 +162,6 @@ pub async fn register(
             username,
             None,
             Some("用户名不能为空。".into()),
-            form.csrf_token,
         );
     }
     if form.password.trim().len() < 8 {
@@ -217,7 +173,6 @@ pub async fn register(
             username,
             None,
             Some("密码至少需要 8 个字符。".into()),
-            form.csrf_token,
         );
     }
     if !state.db.register_public_user(&username, &form.password)? {
@@ -229,18 +184,11 @@ pub async fn register(
             username,
             None,
             Some("该用户名已被注册。".into()),
-            form.csrf_token,
         );
     }
-    let session = state
-        .db
-        .create_public_session(&username, state.config.session_ttl_hours)?;
+    let token = state.db.create_public_session(&username)?;
     Ok((
-        jar.remove(csrf::clear_pre_auth_cookie())
-            .add(auth::build_user_session_cookie(
-                session.token,
-                &state.config,
-            )),
+        jar.add(auth::build_user_session_cookie(token)),
         Redirect::to(&next),
     )
         .into_response())
@@ -249,22 +197,12 @@ pub async fn register(
 pub async fn login(
     State(state): State<AppState>,
     jar: CookieJar,
-    headers: HeaderMap,
     Form(form): Form<LoginForm>,
 ) -> AppResult<Response> {
     let next = normalize_next(form.next.as_deref(), "/account");
     if auth::current_public_user(&jar, &state)?.is_some() {
         return Ok(Redirect::to(&next).into_response());
     }
-    csrf::verify_pre_auth(&jar, &form.csrf_token)?;
-    rate_limit::check(
-        &state,
-        "account-login",
-        &form.username,
-        &headers,
-        rate_limit::PUBLIC_AUTH_LIMIT,
-        rate_limit::PUBLIC_AUTH_WINDOW_SECS,
-    )?;
 
     let token = form.cf_turnstile_response.as_deref().unwrap_or_default();
     match turnstile::verify_turnstile(token, &state.config, None).await {
@@ -278,7 +216,6 @@ pub async fn login(
                 String::new(),
                 Some("人机验证失败，请重试。".into()),
                 None,
-                form.csrf_token,
             );
         }
         Err(err) => {
@@ -290,7 +227,6 @@ pub async fn login(
                 String::new(),
                 Some(format!("人机验证异常：{err}")),
                 None,
-                form.csrf_token,
             );
         }
     }
@@ -305,19 +241,12 @@ pub async fn login(
             String::new(),
             Some("用户名或密码错误。".into()),
             None,
-            form.csrf_token,
         );
     }
 
-    let session = state
-        .db
-        .create_public_session(&username, state.config.session_ttl_hours)?;
+    let token = state.db.create_public_session(&username)?;
     Ok((
-        jar.remove(csrf::clear_pre_auth_cookie())
-            .add(auth::build_user_session_cookie(
-                session.token,
-                &state.config,
-            )),
+        jar.add(auth::build_user_session_cookie(token)),
         Redirect::to(&next),
     )
         .into_response())
@@ -328,10 +257,6 @@ pub async fn logout(
     jar: CookieJar,
     Form(form): Form<LogoutForm>,
 ) -> AppResult<Response> {
-    let Some(session) = auth::current_public_session(&jar, &state)? else {
-        return Ok(Redirect::to("/account").into_response());
-    };
-    csrf::verify_form(&session.csrf_token, &form.csrf_token)?;
     if let Some(token) = auth::user_session_token(&jar) {
         let _ = state.db.delete_public_session(&token);
     }
@@ -365,20 +290,11 @@ pub async fn create_annotation(
     Path(slug): Path<String>,
     State(state): State<AppState>,
     jar: CookieJar,
-    headers: HeaderMap,
     Json(payload): Json<CreateAnnotationPayload>,
 ) -> AppResult<Response> {
     ensure_published_note(&state, &slug).await?;
-    let session = auth::current_viewer_session(&jar, &state)?.ok_or(AppError::Unauthorized)?;
-    csrf::verify_header(&headers, &session.csrf_token)?;
-    rate_limit::check(
-        &state,
-        "api-annotation",
-        &session.username,
-        &headers,
-        rate_limit::API_WRITE_LIMIT,
-        rate_limit::API_WRITE_WINDOW_SECS,
-    )?;
+    let (username, _is_admin) =
+        auth::current_viewer(&jar, &state)?.ok_or(AppError::Unauthorized)?;
     validate_offsets(payload.start_offset, payload.end_offset)?;
     let quote = payload.quote.trim().to_string();
     if quote.is_empty() {
@@ -393,7 +309,7 @@ pub async fn create_annotation(
     }
     let visibility = normalize_visibility(payload.visibility, comment.is_some())?;
     let record = state.db.create_annotation(NewAnnotation {
-        username: &session.username,
+        username: &username,
         note_slug: &slug,
         start_offset: payload.start_offset,
         end_offset: payload.end_offset,
@@ -409,19 +325,9 @@ pub async fn update_annotation(
     Path(id): Path<i64>,
     State(state): State<AppState>,
     jar: CookieJar,
-    headers: HeaderMap,
     Json(payload): Json<UpdateAnnotationPayload>,
 ) -> AppResult<Json<NoteAnnotation>> {
-    let session = auth::current_viewer_session(&jar, &state)?.ok_or(AppError::Unauthorized)?;
-    csrf::verify_header(&headers, &session.csrf_token)?;
-    rate_limit::check(
-        &state,
-        "api-annotation",
-        &session.username,
-        &headers,
-        rate_limit::API_WRITE_LIMIT,
-        rate_limit::API_WRITE_WINDOW_SECS,
-    )?;
+    let (username, is_admin) = auth::current_viewer(&jar, &state)?.ok_or(AppError::Unauthorized)?;
     let color = normalize_color(payload.color)?;
     let comment = normalize_comment(payload.comment);
     if color.is_none() && comment.is_none() {
@@ -430,7 +336,7 @@ pub async fn update_annotation(
         ));
     }
     let visibility = normalize_visibility(payload.visibility, comment.is_some())?;
-    let annotation = if session.is_admin {
+    let annotation = if is_admin {
         state.db.update_annotation_by_admin(
             id,
             color.as_deref(),
@@ -440,7 +346,7 @@ pub async fn update_annotation(
     } else {
         state.db.update_annotation(
             id,
-            &session.username,
+            &username,
             color.as_deref(),
             comment.as_deref(),
             &visibility,
@@ -454,22 +360,12 @@ pub async fn delete_annotation(
     Path(id): Path<i64>,
     State(state): State<AppState>,
     jar: CookieJar,
-    headers: HeaderMap,
 ) -> AppResult<StatusCode> {
-    let session = auth::current_viewer_session(&jar, &state)?.ok_or(AppError::Unauthorized)?;
-    csrf::verify_header(&headers, &session.csrf_token)?;
-    rate_limit::check(
-        &state,
-        "api-annotation",
-        &session.username,
-        &headers,
-        rate_limit::API_WRITE_LIMIT,
-        rate_limit::API_WRITE_WINDOW_SECS,
-    )?;
-    let deleted = if session.is_admin {
+    let (username, is_admin) = auth::current_viewer(&jar, &state)?.ok_or(AppError::Unauthorized)?;
+    let deleted = if is_admin {
         state.db.delete_annotation_by_admin(id)?
     } else {
-        state.db.delete_annotation(id, &session.username)?
+        state.db.delete_annotation(id, &username)?
     };
     if !deleted {
         return Err(AppError::NotFound(format!("annotation {}", id)));
@@ -632,7 +528,6 @@ fn validate_danmaku_time(time_ms: i64) -> AppResult<()> {
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 fn render_account(
     state: &AppState,
     viewer: Option<String>,
@@ -641,7 +536,6 @@ fn render_account(
     register_username: String,
     login_error: Option<String>,
     register_error: Option<String>,
-    csrf_token: String,
 ) -> AppResult<Response> {
     AccountTemplate {
         site_name: state.config.site_name.clone(),
@@ -653,7 +547,6 @@ fn render_account(
         register_error,
         turnstile_enabled: state.config.turnstile_enabled,
         turnstile_site_key: state.config.turnstile_site_key.clone(),
-        csrf_token,
     }
     .render()
     .map(Html)

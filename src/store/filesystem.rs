@@ -10,10 +10,8 @@ use crate::{
         front_matter::{FrontMatter, parse_front_matter},
         markdown::slugify,
     },
-    error::{AppError, AppResult},
+    error::AppResult,
 };
-
-const MAX_SAFE_COMPONENT_LEN: usize = 180;
 
 fn hash_string(value: &str) -> String {
     let mut hasher = Sha256::new();
@@ -87,7 +85,6 @@ pub fn discover_notes(config: &AppConfig) -> AppResult<Vec<NoteSource>> {
 }
 
 pub fn write_note(config: &AppConfig, slug: &str, contents: &str) -> AppResult<PathBuf> {
-    let slug = safe_basename(slug, "note slug")?;
     let path = config.notes_dir.join(format!("{}.md", slug));
     fs::create_dir_all(&config.notes_dir)?;
     fs::write(&path, contents)?;
@@ -95,27 +92,10 @@ pub fn write_note(config: &AppConfig, slug: &str, contents: &str) -> AppResult<P
 }
 
 pub fn write_asset(config: &AppConfig, filename: &str, bytes: &[u8]) -> AppResult<PathBuf> {
-    let filename = safe_basename(filename, "asset filename")?;
     let path = config.assets_dir.join(filename);
     fs::create_dir_all(&config.assets_dir)?;
     fs::write(&path, bytes)?;
     Ok(path)
-}
-
-pub fn safe_basename<'a>(value: &'a str, label: &str) -> AppResult<&'a str> {
-    let value = value.trim();
-    let invalid = value.is_empty()
-        || value == "."
-        || value == ".."
-        || value.len() > MAX_SAFE_COMPONENT_LEN
-        || value.contains("..")
-        || value.contains('/')
-        || value.contains('\\')
-        || value.contains('\0');
-    if invalid {
-        return Err(AppError::BadRequest(format!("{label} is invalid")));
-    }
-    Ok(value)
 }
 
 pub fn ensure_sample_content(config: &AppConfig) -> AppResult<()> {

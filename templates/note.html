@@ -34,7 +34,6 @@
     data-viewer-username="{{ viewer_username }}"
     data-is-admin="{% if is_admin %}true{% else %}false{% endif %}"
     data-account-url="/account?next=/notes/{{ note.slug }}"
-    data-csrf-token="{{ csrf_token }}"
   >
     <div class="note-article-body" data-annotation-root>
       {{ note.html|safe }}
@@ -56,7 +55,6 @@
           <div class="annotation-auth-actions">
             <a class="button secondary" href="/account?next=/notes/{{ note.slug }}">账号中心</a>
             <form action="/account/logout" method="post">
-              <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
               <input type="hidden" name="next" value="/notes/{{ note.slug }}" />
               <button class="secondary" type="submit">退出登录</button>
             </form>

@@ -22,7 +22,6 @@
         <div class="stack-form">
           <a class="button" href="{{ next }}">返回当前页面</a>
           <form action="/account/logout" method="post">
-            <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
             <input type="hidden" name="next" value="{{ next }}" />
             <button class="secondary" type="submit">退出登录</button>
           </form>
@@ -38,8 +37,7 @@
               {% when Some with (message) %}
                 <p class="error-banner">{{ message }}</p>
               {% when None %}
-            {% endmatch %}
-            <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
+              {% endmatch %}
             <input type="hidden" name="next" value="{{ next }}" />
             <label>用户名<input type="text" name="username" value="{{ login_username }}" autocomplete="username" required /></label>
             <label>密码<input type="password" name="password" autocomplete="current-password" required /></label>
@@ -60,8 +58,7 @@
               {% when Some with (message) %}
                 <p class="error-banner">{{ message }}</p>
               {% when None %}
-            {% endmatch %}
-            <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
+              {% endmatch %}
             <input type="hidden" name="next" value="{{ next }}" />
             <label>用户名<input type="text" name="username" value="{{ register_username }}" autocomplete="username" required /></label>
             <label>密码<input type="password" name="password" minlength="8" autocomplete="new-password" required /></label>

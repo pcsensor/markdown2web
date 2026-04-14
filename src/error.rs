@@ -14,8 +14,6 @@ pub enum AppError {
     Unauthorized,
     #[error("bad request: {0}")]
     BadRequest(String),
-    #[error("too many requests: {0}")]
-    RateLimited(String),
     #[error("internal error: {0}")]
     Internal(String),
 }
@@ -32,7 +30,6 @@ impl IntoResponse for AppError {
             AppError::NotFound(_) => (StatusCode::NOT_FOUND, "Not Found"),
             AppError::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized"),
             AppError::BadRequest(_) => (StatusCode::BAD_REQUEST, "Bad Request"),
-            AppError::RateLimited(_) => (StatusCode::TOO_MANY_REQUESTS, "Too Many Requests"),
             AppError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error"),
         };
         let body = format!(
