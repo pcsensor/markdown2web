@@ -1531,7 +1531,10 @@ function wireVideoPlayers() {
       // 如果视频正在播放且不是强制常驻模式，开启自动隐藏定时器
       if (!sticky && !video.paused && !video.ended) {
         controlsTimer = window.setTimeout(() => {
-          if (!container.matches(':focus-within')) {
+          // 如果焦点在输入框（正在发送弹幕），则不自动隐藏
+          const active = document.activeElement;
+          const isTyping = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
+          if (!isTyping) {
             container.classList.remove('is-controls-visible');
           }
         }, 2500);
