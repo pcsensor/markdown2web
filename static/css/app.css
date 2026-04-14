@@ -2142,6 +2142,22 @@ button.secondary, .button.secondary {
   font-weight: 600;
   box-shadow: none;
 }
+.video-danmaku-form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+.video-danmaku-status {
+  grid-column: 2 / -1;
+  min-height: 1.2em;
+  color: #64748b;
+  font-size: 0.78em;
+}
+.video-danmaku-status[data-status="success"] {
+  color: #047857;
+}
+.video-danmaku-status[data-status="error"] {
+  color: #dc2626;
+}
 .video-danmaku-login {
   align-self: flex-end;
   padding: 0.5em 1em;

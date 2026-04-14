@@ -1540,6 +1540,7 @@ function wireVideoPlayers() {
     const danmakuForm = container.querySelector('[data-video-danmaku-form]');
     const danmakuInput = container.querySelector('[data-video-danmaku-input]');
     const danmakuColor = container.querySelector('[data-video-danmaku-color]');
+    const danmakuStatus = container.querySelector('[data-video-danmaku-status]');
     const danmakuLogin = container.querySelector('[data-video-danmaku-login]');
     const article = container.closest('[data-note-article]');
     if (!video || !source || video.dataset.videoWired === 'true') return;
@@ -1659,6 +1660,22 @@ function wireVideoPlayers() {
       danmakuState.items = data.danmaku || [];
       danmakuState.loaded = true;
       syncDanmaku(true);
+    };
+
+    const setDanmakuStatus = (message, kind = '') => {
+      if (!danmakuStatus) return;
+      danmakuStatus.textContent = message;
+      danmakuStatus.dataset.status = kind;
+    };
+
+    const parseErrorMessage = async (response) => {
+      try {
+        const data = await response.clone().json();
+        return data?.message || data?.error || `发送失败（${response.status}）`;
+      } catch (_error) {
+        const text = await response.text().catch(() => '');
+        return text || `发送失败（${response.status}）`;
+      }
     };
 
     const loadVideo = async (autoplay = false) => {
@@ -1884,34 +1901,65 @@ function wireVideoPlayers() {
 
     danmakuForm?.addEventListener('submit', async (event) => {
       event.preventDefault();
-      if (!danmakuEnabled || !danmakuInput || !noteSlug || !videoKey) return;
+      if (!danmakuEnabled) {
+        window.location.href = accountUrl;
+        return;
+      }
+      if (!danmakuInput || !noteSlug || !videoKey) {
+        setDanmakuStatus('视频还没准备好，请稍后再试', 'error');
+        return;
+      }
+      if (!csrfToken) {
+        setDanmakuStatus('登录状态已过期，请刷新页面后重试', 'error');
+        return;
+      }
       const body = danmakuInput.value.trim();
       if (!body) return;
+      const submitButton = danmakuForm.querySelector('button[type="submit"]');
+      if (submitButton) submitButton.disabled = true;
+      setDanmakuStatus('发送中…', 'pending');
       const payload = {
         video_src: videoKey,
         time_ms: Math.max(0, Math.floor(video.currentTime * 1000)),
         body,
         color: danmakuColor?.value || '#ffffff',
       };
-      const response = await fetch(`/api/notes/${encodeURIComponent(noteSlug)}/danmaku`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-          'X-CSRF-Token': csrfToken,
-        },
-        body: JSON.stringify(payload),
-      });
-      if (response.status === 401) {
-        window.location.href = accountUrl;
-        return;
+      try {
+        const response = await fetch(`/api/notes/${encodeURIComponent(noteSlug)}/danmaku`, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'X-CSRF-Token': csrfToken,
+          },
+          body: JSON.stringify(payload),
+        });
+        if (response.status === 401) {
+          window.location.href = accountUrl;
+          return;
+        }
+        if (response.status === 400 || response.status === 403) {
+          setDanmakuStatus('登录状态已过期，请刷新页面后重试', 'error');
+          return;
+        }
+        if (!response.ok) {
+          setDanmakuStatus(await parseErrorMessage(response), 'error');
+          return;
+        }
+        const created = await response.json();
+        danmakuInput.value = '';
+        danmakuState.loaded = true;
+        danmakuState.items.push(created);
+        danmakuState.shown.add(created.id);
+        showDanmaku(created);
+        setDanmakuStatus('已发送', 'success');
+      } catch (error) {
+        console.warn('Danmaku send failed', error);
+        setDanmakuStatus('网络异常，发送失败', 'error');
+      } finally {
+        if (submitButton) submitButton.disabled = false;
       }
-      if (!response.ok) return;
-      const created = await response.json();
-      danmakuInput.value = '';
-      danmakuState.items.push(created);
-      danmakuState.shown.add(created.id);
-      showDanmaku(created);
     });
 
     updateControls();

@@ -848,6 +848,7 @@ status: published
     assert!(html.contains("data-video-danmaku-layer"));
     assert!(html.contains("data-video-danmaku-form"));
     assert!(html.contains("data-video-danmaku-input"));
+    assert!(html.contains("data-video-danmaku-status"));
     assert!(html.contains("data-video-danmaku-login"));
     assert!(html.contains("data-video-speed"));
     assert!(html.contains("data-video-danmaku-size"));
@@ -1921,6 +1922,8 @@ fn annotation_wiring_exists() {
     assert!(css.contains("--danmaku-font-size, 1.25rem"));
     assert!(css.contains(".video-danmaku-form"));
     assert!(css.contains(".video-danmaku-color"));
+    assert!(css.contains(".video-danmaku-status"));
+    assert!(css.contains(".video-danmaku-status[data-status=\"error\"]"));
     assert!(css.contains(".video-danmaku-login"));
     assert!(css.contains(".video-load-button:hover"));
     assert!(css.contains(".video-load-button:active"));
@@ -1958,6 +1961,13 @@ fn annotation_wiring_exists() {
     assert!(js.contains("--danmaku-font-size"));
     assert!(js.contains("data-video-danmaku-form"));
     assert!(js.contains("data-video-danmaku-color"));
+    assert!(js.contains("data-video-danmaku-status"));
+    assert!(js.contains("setDanmakuStatus('发送中…', 'pending')"));
+    assert!(js.contains("setDanmakuStatus('已发送', 'success')"));
+    assert!(js.contains("if (!csrfToken)"));
+    assert!(js.contains("credentials: 'same-origin'"));
+    assert!(js.contains("Danmaku send failed"));
+    assert!(js.contains("登录状态已过期，请刷新页面后重试"));
     assert!(js.contains("showDanmaku"));
     assert!(js.contains("syncDanmaku(true);"));
     assert!(js.contains("video.addEventListener('seeking'"));

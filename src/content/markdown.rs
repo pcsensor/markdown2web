@@ -248,6 +248,7 @@ fn restore_video_blocks(html: &str, video_embeds: &[VideoEmbed]) -> String {
                             <input type="color" class="video-danmaku-color" data-video-danmaku-color value="#ffffff" aria-label="弹幕颜色" />
                             <input type="text" data-video-danmaku-input maxlength="80" placeholder="登录后发送弹幕" />
                             <button type="submit" data-static-button>发送</button>
+                            <span class="video-danmaku-status" data-video-danmaku-status role="status" aria-live="polite"></span>
                         </form>
                         <a class="video-danmaku-login" data-video-danmaku-login href="/account">登录后发送弹幕</a>
                     </div>
