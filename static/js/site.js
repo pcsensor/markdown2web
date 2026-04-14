@@ -49,7 +49,8 @@ function wireRevealAnimations() {
     '.panel',
     '.auth-copy',
   ];
-  const elements = [...new Set(selectors.flatMap((selector) => Array.from(document.querySelectorAll(selector))))];
+  const elements = [...new Set(selectors.flatMap((selector) => Array.from(document.querySelectorAll(selector))))]
+    .filter((element) => !element.hasAttribute('data-note-article'));
 
   if (prefersReducedMotion()) {
     elements.forEach((element) => element.classList.add('is-visible'));

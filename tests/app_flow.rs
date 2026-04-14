@@ -1712,7 +1712,7 @@ fn note_layout_places_sidebar_left_article_center_and_rail_right() {
     assert!(css.contains(".annotation-rail { grid-area: rail;"));
     assert!(css.contains(".note-layout {\n  display: grid;"));
     assert!(css.contains("min-width: 0;"));
-    assert!(css.contains("overflow-x: clip;"));
+    assert!(css.contains("overflow: visible;"));
     assert!(css.contains("touch-action: pan-y;"));
     assert!(css.contains(".note-article.interactive-card:hover"));
     assert!(css.contains("transform: none;"));
@@ -1728,12 +1728,22 @@ fn note_article_does_not_become_touch_scroll_container() {
     let note_article_block = &css
         [note_article_start..css[note_article_start..].find("}\n").unwrap() + note_article_start];
 
-    assert!(note_article_block.contains("overflow-x: clip;"));
-    assert!(note_article_block.contains("overflow-y: visible;"));
+    assert!(note_article_block.contains("overflow: visible;"));
     assert!(note_article_block.contains("touch-action: pan-y;"));
+    assert!(note_article_block.contains("transform: none;"));
     assert!(!note_article_block.contains("overflow-x: hidden;"));
+    assert!(!note_article_block.contains("overflow-x: clip;"));
+    assert!(!note_article_block.contains("overflow-y: auto;"));
+    assert!(!note_article_block.contains("overflow: hidden;"));
+    assert!(!note_article_block.contains("transition:\n    transform"));
+    assert!(
+        css.contains(".note-article.reveal-on-scroll,\n.note-article.reveal-on-scroll.is-visible")
+    );
     assert!(css.contains("@media (hover: none), (pointer: coarse)"));
     assert!(css.contains(".interactive-card-subtle:hover {\n    transform: none;"));
+
+    let js = fs::read_to_string("static/js/site.js").unwrap();
+    assert!(js.contains(".filter((element) => !element.hasAttribute('data-note-article'))"));
 }
 
 #[test]
@@ -1908,7 +1918,7 @@ fn annotation_wiring_exists() {
     assert!(css.contains(".video-load-button::before"));
     assert!(css.contains("transform: translate(-50%, -50%);"));
     assert!(css.contains(".note-article {"));
-    assert!(css.contains("overflow-x: clip;"));
+    assert!(css.contains("overflow: visible;"));
     assert!(css.contains(".note-article.interactive-card:hover"));
     assert!(css.contains(".prose :where(img, video, iframe, figure, table, pre)"));
     assert!(css.contains(".video-player-frame"));

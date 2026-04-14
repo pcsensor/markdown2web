@@ -931,9 +931,10 @@ select:focus-visible {
   position: relative;
   min-width: 0;
   max-width: 100%;
-  overflow-x: clip;
-  overflow-y: visible;
+  overflow: visible;
   touch-action: pan-y;
+  transform: none;
+  transition: box-shadow 200ms cubic-bezier(.2,.75,.2,1), border-color 200ms ease-out, background-color 200ms ease-out;
 }
 .note-article.interactive-card:hover {
   transform: none;
@@ -1258,6 +1259,13 @@ select:focus-visible {
 .reveal-on-scroll.is-visible {
   opacity: 1;
   transform: translateY(0);
+}
+
+.note-article.reveal-on-scroll,
+.note-article.reveal-on-scroll.is-visible {
+  opacity: 1;
+  transform: none;
+  transition: box-shadow 200ms cubic-bezier(.2,.75,.2,1), border-color 200ms ease-out, background-color 200ms ease-out;
 }
 
 .search-form, .stack-form, .auth-shell form { display: grid; gap: 14px; }
