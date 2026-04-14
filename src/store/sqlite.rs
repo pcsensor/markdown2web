@@ -152,12 +152,24 @@ impl AppDatabase {
 
         let exists: Option<String> = conn
             .query_row(
-                "SELECT username FROM admin_users WHERE username = ?1",
+                "SELECT password_hash FROM admin_users WHERE username = ?1",
                 params![username],
                 |row| row.get(0),
             )
             .optional()?;
-        if exists.is_none() {
+
+        if let Some(current_hash) = exists {
+            // 如果环境变量中的密码不是默认密码，且与当前数据库中的不匹配，则尝试更新
+            // 注意：这里为了安全，只有在用户明确通过环境变量提供了非默认密码时才考虑同步
+            if password != "admin123456" && !verify_password(&current_hash, password) {
+                let new_hash = hash_password(password)?;
+                conn.execute(
+                    "UPDATE admin_users SET password_hash = ?1 WHERE username = ?2",
+                    params![new_hash, username],
+                )?;
+                eprintln!("[Info] Admin password updated from environment variable.");
+            }
+        } else {
             let hash = hash_password(password)?;
             conn.execute(
                 "INSERT INTO admin_users(username, password_hash, created_at) VALUES (?1, ?2, ?3)",

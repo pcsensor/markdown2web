@@ -512,13 +512,24 @@ fn normalize_video_src(value: String) -> AppResult<(String, String)> {
 
     // Keep the generated per-video suffix (`#0`, `#1`, ...) so repeated
     // embeds of the same asset do not share one danmaku timeline.
-    let (path, fragment) = value.split_once('#').unwrap_or((value, ""));
+    let (path_part, fragment) = value.split_once('#').unwrap_or((value, ""));
 
-    if !path.starts_with("/assets/") {
+    // Handle both relative path "/assets/..." and absolute URL "https://.../assets/..."
+    let path = if path_part.starts_with("http://") || path_part.starts_with("https://") {
+        if let Some(pos) = path_part.find("/assets/") {
+            &path_part[pos..]
+        } else {
+            return Err(AppError::BadRequest(
+                "video source must be a site asset under /assets/".into(),
+            ));
+        }
+    } else if path_part.starts_with("/assets/") {
+        path_part
+    } else {
         return Err(AppError::BadRequest(
-            "video source must be a site asset".into(),
+            "video source must be a site asset starting with /assets/".into(),
         ));
-    }
+    };
 
     let fragment_suffix = if fragment.is_empty() {
         String::new()
