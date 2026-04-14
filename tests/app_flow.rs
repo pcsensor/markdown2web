@@ -1713,7 +1713,7 @@ fn note_layout_places_sidebar_left_article_center_and_rail_right() {
     assert!(css.contains(".note-layout {\n  display: grid;"));
     assert!(css.contains("min-width: 0;"));
     assert!(css.contains("overflow: visible;"));
-    assert!(css.contains("touch-action: pan-y;"));
+    assert!(css.contains("touch-action: pan-y pinch-zoom;"));
     assert!(css.contains(".note-article.interactive-card:hover"));
     assert!(css.contains("transform: none;"));
     assert!(
@@ -1729,7 +1729,7 @@ fn note_article_does_not_become_touch_scroll_container() {
         [note_article_start..css[note_article_start..].find("}\n").unwrap() + note_article_start];
 
     assert!(note_article_block.contains("overflow: visible;"));
-    assert!(note_article_block.contains("touch-action: pan-y;"));
+    assert!(note_article_block.contains("touch-action: pan-y pinch-zoom;"));
     assert!(note_article_block.contains("transform: none;"));
     assert!(!note_article_block.contains("overflow-x: hidden;"));
     assert!(!note_article_block.contains("overflow-x: clip;"));
@@ -1739,11 +1739,20 @@ fn note_article_does_not_become_touch_scroll_container() {
     assert!(
         css.contains(".note-article.reveal-on-scroll,\n.note-article.reveal-on-scroll.is-visible")
     );
+    assert!(css.contains(".note-article.note-card:hover"));
+    assert!(css.contains(".note-article::before,\n.note-article:hover::before"));
+    assert!(css.contains(".note-article-body {\n  position: relative;"));
+    assert!(css.contains(".note-article :where(h1, h2, h3, h4, h5, h6, p, li, blockquote, figure, img, pre, code, table)"));
     assert!(css.contains("@media (hover: none), (pointer: coarse)"));
     assert!(css.contains(".interactive-card-subtle:hover {\n    transform: none;"));
 
     let js = fs::read_to_string("static/js/site.js").unwrap();
     assert!(js.contains(".filter((element) => !element.hasAttribute('data-note-article'))"));
+    assert!(js.contains("let touchMoved = false;"));
+    assert!(js.contains("const touchMoveThreshold = 8;"));
+    assert!(js.contains("root.addEventListener('touchmove'"));
+    assert!(js.contains("if (touchMoved) return;"));
+    assert!(js.contains("{ passive: true }"));
 }
 
 #[test]
@@ -1969,6 +1978,8 @@ fn annotation_wiring_exists() {
     assert!(js.contains("data-annotation-visibility"));
     assert!(js.contains("visibilitySelect.value"));
     assert!(js.contains("addEventListener('mousedown'"));
+    assert!(js.contains("addEventListener('touchmove'"));
+    assert!(js.contains("if (touchMoved) return;"));
     assert!(js.contains("addEventListener('contextmenu'"));
     assert!(js.contains("openOwnedAnnotationPanel"));
     assert!(js.contains("annotationFromEvent"));

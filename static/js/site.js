@@ -1019,14 +1019,40 @@ const updateToolbarState = () => {
     button.addEventListener('click', () => closeCommentModal(null));
   });
 
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let touchMoved = false;
+  const touchMoveThreshold = 8;
+
   root.addEventListener('mouseup', (event) => {
     // 忽略右键释放，避免与 contextmenu 冲突
     if (event.button === 2) return;
     window.setTimeout(showSelectionToolbar, 0);
   });
+
+  root.addEventListener('touchstart', (event) => {
+    const touch = event.changedTouches?.[0];
+    if (!touch) return;
+    touchStartX = touch.clientX;
+    touchStartY = touch.clientY;
+    touchMoved = false;
+  }, { passive: true });
+
+  root.addEventListener('touchmove', (event) => {
+    const touch = event.changedTouches?.[0];
+    if (!touch) return;
+    const movedX = Math.abs(touch.clientX - touchStartX);
+    const movedY = Math.abs(touch.clientY - touchStartY);
+    if (movedX > touchMoveThreshold || movedY > touchMoveThreshold) {
+      touchMoved = true;
+      hideToolbar();
+    }
+  }, { passive: true });
+
   root.addEventListener('touchend', () => {
+    if (touchMoved) return;
     window.setTimeout(showSelectionToolbar, 0);
-  });
+  }, { passive: true });
 
   const openOwnedAnnotationPanel = (annotationElement, forceNew = false) => {
     window.getSelection()?.removeAllRanges();

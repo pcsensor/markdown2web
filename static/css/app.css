@@ -932,18 +932,34 @@ select:focus-visible {
   min-width: 0;
   max-width: 100%;
   overflow: visible;
-  touch-action: pan-y;
+  touch-action: pan-y pinch-zoom;
   transform: none;
   transition: box-shadow 200ms cubic-bezier(.2,.75,.2,1), border-color 200ms ease-out, background-color 200ms ease-out;
 }
-.note-article.interactive-card:hover {
+.note-article,
+.note-article:hover,
+.note-article:active,
+.note-article:focus-within,
+.note-article.interactive-card:hover,
+.note-article.note-card:hover {
   transform: none;
+}
+.note-article::before,
+.note-article:hover::before,
+.note-article.interactive-card:hover::before,
+.note-article.note-card:hover::before {
+  content: none;
+  opacity: 0;
 }
 .note-article-body {
   position: relative;
   z-index: 1;
   min-width: 0;
   max-width: 100%;
+  touch-action: pan-y pinch-zoom;
+}
+.note-article :where(h1, h2, h3, h4, h5, h6, p, li, blockquote, figure, img, pre, code, table) {
+  touch-action: pan-y pinch-zoom;
 }
 .note-sidebar {
   grid-area: sidebar;
