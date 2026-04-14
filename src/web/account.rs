@@ -392,21 +392,50 @@ pub async fn create_danmaku(
     jar: CookieJar,
     Json(payload): Json<CreateDanmakuPayload>,
 ) -> AppResult<Response> {
-    ensure_published_note(&state, &slug).await?;
-    let (username, _is_admin) =
-        auth::current_viewer(&jar, &state)?.ok_or(AppError::Unauthorized)?;
-    let (full_src, _filename) = normalize_video_src(payload.video_src)?;
-    let body = normalize_danmaku_body(payload.body)?;
+    if let Err(e) = ensure_published_note(&state, &slug).await {
+        eprintln!("[Danmaku Error] Note not found: {:?}", e);
+        return Err(e);
+    }
+    let (username, _is_admin) = match auth::current_viewer(&jar, &state)? {
+        Some(user) => user,
+        None => {
+            eprintln!("[Danmaku Error] Unauthorized: No active session found");
+            return Err(AppError::Unauthorized);
+        }
+    };
+    let (full_src, _filename) = match normalize_video_src(payload.video_src) {
+        Ok(src) => src,
+        Err(e) => {
+            eprintln!("[Danmaku Error] Invalid video src: {:?}", e);
+            return Err(e);
+        }
+    };
+    let body = match normalize_danmaku_body(payload.body) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("[Danmaku Error] Invalid body: {:?}", e);
+            return Err(e);
+        }
+    };
     let color = normalize_color(payload.color)?.unwrap_or_else(|| "#ffffff".into());
-    validate_danmaku_time(payload.time_ms)?;
-    let record = state.db.create_video_danmaku(NewVideoDanmaku {
+    if let Err(e) = validate_danmaku_time(payload.time_ms) {
+        eprintln!("[Danmaku Error] Invalid time: {:?}", e);
+        return Err(e);
+    }
+    let record = match state.db.create_video_danmaku(NewVideoDanmaku {
         username: &username,
         note_slug: &slug,
         video_src: &full_src,
         time_ms: payload.time_ms,
         body: &body,
         color: &color,
-    })?;
+    }) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("[Danmaku Error] DB Insert failed: {:?}", e);
+            return Err(e);
+        }
+    };
     Ok((StatusCode::CREATED, Json(record)).into_response())
 }
 
