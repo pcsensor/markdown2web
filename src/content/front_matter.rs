@@ -38,26 +38,58 @@ pub struct FrontMatter {
 }
 
 pub fn parse_front_matter(raw: &str) -> AppResult<(FrontMatter, String)> {
-    // 支持 LF (\n) 和 CRLF (\r\n) 两种换行符格式
-    let has_lf_front_matter = raw.starts_with("---\n");
-    let has_crlf_front_matter = raw.starts_with("---\r\n");
-
-    if !has_lf_front_matter && !has_crlf_front_matter {
+    // 统一处理换行符，将 \r\n 替换为 \n 进行分割判断
+    // 但为了保持正文原始性，我们只在查找分隔符时使用灵活匹配
+    
+    if !raw.starts_with("---") {
         return Ok((FrontMatter::default(), raw.to_string()));
     }
 
-    // 根据换行符类型选择分隔符
-    let delimiter = if has_crlf_front_matter {
-        "---\r\n"
+    // 查找第一个换行符，确定第一行是否只是 "---" (允许后面有空格)
+    let first_line_end = raw.find('\n').unwrap_or(raw.len());
+    let first_line = raw[..first_line_end].trim_end();
+    if first_line != "---" {
+        return Ok((FrontMatter::default(), raw.to_string()));
+    }
+
+    // 查找第二个 "---" 分隔符
+    // 它必须在一行的开头
+    let search_start = first_line_end + 1;
+    if search_start >= raw.len() {
+        return Ok((FrontMatter::default(), raw.to_string()));
+    }
+
+    // 我们寻找 "\n---" 序列
+    let mut found_end = None;
+    let bytes = raw.as_bytes();
+    for i in search_start..bytes.len() {
+        if bytes[i] == b'\n' && i + 1 < bytes.len() && raw[i+1..].starts_with("---") {
+            let line_after = &raw[i+1..];
+            let next_line_end = line_after.find('\n').unwrap_or(line_after.len());
+            if line_after[..next_line_end].trim_end() == "---" {
+                found_end = Some((i, i + 1 + next_line_end));
+                break;
+            }
+        }
+    }
+
+    if let Some((yaml_end_in_raw, rest_start)) = found_end {
+        let yaml = &raw[search_start..yaml_end_in_raw];
+        let rest = &raw[rest_start..];
+        
+        let front_matter = serde_yaml::from_str::<FrontMatter>(yaml)
+            .unwrap_or_else(|_| FrontMatter::default());
+        
+        // 如果解析出来的 slug 有 \r，去掉它（防御性编程）
+        let mut fm = front_matter;
+        if let Some(ref mut slug) = fm.slug {
+            *slug = slug.trim().to_string();
+        }
+        
+        Ok((fm, rest.trim_start_matches(|c| c == '\r' || c == '\n').to_string()))
     } else {
-        "---\n"
-    };
-    let mut parts = raw.splitn(3, delimiter);
-    let _ = parts.next();
-    let yaml = parts.next().unwrap_or_default();
-    let rest = parts.next().unwrap_or_default();
-    let front_matter = serde_yaml::from_str::<FrontMatter>(yaml)?;
-    Ok((front_matter, rest.to_string()))
+        Ok((FrontMatter::default(), raw.to_string()))
+    }
 }
 
 pub fn compose_markdown(front_matter: &FrontMatter, body: &str) -> AppResult<String> {

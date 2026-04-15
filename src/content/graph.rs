@@ -16,10 +16,11 @@ pub fn build_site_data(
     let mut note_map = BTreeMap::new();
     let mut tags = BTreeMap::<String, Vec<String>>::new();
     let mut backlinks = BTreeMap::<String, BTreeSet<String>>::new();
+    let mut seen_slugs = std::collections::HashSet::new();
 
     for note in notes {
         let is_published = note.is_published();
-        if is_published {
+        if is_published && seen_slugs.insert(note.slug.clone()) {
             ordered_slugs.push(note.slug.clone());
             for tag in &note.tags {
                 tags.entry(tag.clone()).or_default().push(note.slug.clone());
