@@ -2,8 +2,7 @@
 title: Caddy
 slug: caddy
 summary: ''
-category:
-- study
+category: []
 tags: []
 status: published
 updated: 2026-04-14T12:46
