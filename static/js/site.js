@@ -49,7 +49,8 @@ function wireRevealAnimations() {
     '.panel',
     '.auth-copy',
   ];
-  const elements = [...new Set(selectors.flatMap((selector) => Array.from(document.querySelectorAll(selector))))];
+  const elements = [...new Set(selectors.flatMap((selector) => Array.from(document.querySelectorAll(selector))))]
+    .filter((element) => !element.hasAttribute('data-note-article'));
 
   if (prefersReducedMotion()) {
     elements.forEach((element) => element.classList.add('is-visible'));
@@ -1531,10 +1532,14 @@ function wireVideoPlayers() {
       // 如果视频正在播放且不是强制常驻模式，开启自动隐藏定时器
       if (!sticky && !video.paused && !video.ended) {
         controlsTimer = window.setTimeout(() => {
-          // 如果焦点在输入框（正在发送弹幕），则不自动隐藏
+          // 如果焦点在输入框或选择框上（如正在输入弹幕），则不自动隐藏
           const active = document.activeElement;
-          const isTyping = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
-          if (!isTyping) {
+          const isInteracting = container.matches(':focus-within') || (active && container.contains(active) && (
+            active.tagName === 'INPUT' ||
+            active.tagName === 'SELECT' ||
+            active.tagName === 'TEXTAREA'
+          ));
+          if (!isInteracting) {
             container.classList.remove('is-controls-visible');
           }
         }, 2500);

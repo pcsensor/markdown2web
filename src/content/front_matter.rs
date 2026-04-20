@@ -40,7 +40,7 @@ pub struct FrontMatter {
 pub fn parse_front_matter(raw: &str) -> AppResult<(FrontMatter, String)> {
     // 统一处理换行符，将 \r\n 替换为 \n 进行分割判断
     // 但为了保持正文原始性，我们只在查找分隔符时使用灵活匹配
-    
+
     if !raw.starts_with("---") {
         return Ok((FrontMatter::default(), raw.to_string()));
     }
@@ -63,8 +63,8 @@ pub fn parse_front_matter(raw: &str) -> AppResult<(FrontMatter, String)> {
     let mut found_end = None;
     let bytes = raw.as_bytes();
     for i in search_start..bytes.len() {
-        if bytes[i] == b'\n' && i + 1 < bytes.len() && raw[i+1..].starts_with("---") {
-            let line_after = &raw[i+1..];
+        if bytes[i] == b'\n' && i + 1 < bytes.len() && raw[i + 1..].starts_with("---") {
+            let line_after = &raw[i + 1..];
             let next_line_end = line_after.find('\n').unwrap_or(line_after.len());
             if line_after[..next_line_end].trim_end() == "---" {
                 found_end = Some((i, i + 1 + next_line_end));
@@ -76,17 +76,17 @@ pub fn parse_front_matter(raw: &str) -> AppResult<(FrontMatter, String)> {
     if let Some((yaml_end_in_raw, rest_start)) = found_end {
         let yaml = &raw[search_start..yaml_end_in_raw];
         let rest = &raw[rest_start..];
-        
-        let front_matter = serde_yaml::from_str::<FrontMatter>(yaml)
-            .unwrap_or_else(|_| FrontMatter::default());
-        
+
+        let front_matter =
+            serde_yaml::from_str::<FrontMatter>(yaml).unwrap_or_else(|_| FrontMatter::default());
+
         // 如果解析出来的 slug 有 \r，去掉它（防御性编程）
         let mut fm = front_matter;
         if let Some(ref mut slug) = fm.slug {
             *slug = slug.trim().to_string();
         }
-        
-        Ok((fm, rest.trim_start_matches(|c| c == '\r' || c == '\n').to_string()))
+
+        Ok((fm, rest.trim_start_matches(['\r', '\n']).to_string()))
     } else {
         Ok((FrontMatter::default(), raw.to_string()))
     }
