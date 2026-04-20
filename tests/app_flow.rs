@@ -72,7 +72,8 @@ async fn home_and_note_routes_render_content() {
     let html = String::from_utf8(body.to_vec()).unwrap();
     assert!(html.contains("Welcome to markdown2web"));
     assert!(html.contains("reading-progress"));
-    assert!(html.contains("/static/js/site.js"));
+    assert!(html.contains("/static/css/app.css?v=20260420-scrollfix"));
+    assert!(html.contains("/static/js/site.js?v=20260420-scrollfix"));
     assert!(html.contains("cursor-beacon"));
     assert!(html.contains("hero-panel panel interactive-card hero-mascot-panel"));
     assert!(html.contains("data-mascot"));
