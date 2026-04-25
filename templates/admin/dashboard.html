@@ -35,7 +35,7 @@
   </div>
 </section>
 
-<section class="admin-grid">
+<section class="admin-grid dashboard-grid">
   <div class="panel interactive-card admin-panel-stack">
     <div class="panel-title-row">
       <h2>上传 Markdown</h2>
@@ -89,10 +89,10 @@
       <h2>已发布笔记</h2>
       <span class="panel-chip">live</span>
     </div>
-    <div class="stack-list compact">
+    <div class="stack-list admin-note-list">
       {% for note in notes %}
-      <article class="list-card compact interactive-card admin-note-row">
-        <div>
+      <article class="list-card interactive-card admin-note-row">
+        <div class="admin-note-copy">
           <h3><a href="/notes/{{ note.slug }}">{{ note.title }}</a></h3>
           <p>{{ note.summary }}</p>
         </div>

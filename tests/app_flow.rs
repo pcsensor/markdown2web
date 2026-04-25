@@ -72,7 +72,7 @@ async fn home_and_note_routes_render_content() {
     let html = String::from_utf8(body.to_vec()).unwrap();
     assert!(html.contains("Welcome to markdown2web"));
     assert!(html.contains("reading-progress"));
-    assert!(html.contains("/static/css/app.css?v=20260420-scrollfix"));
+    assert!(html.contains("/static/css/app.css?v=20260425-adminnotes-wrap-04"));
     assert!(html.contains("/static/js/site.js?v=20260420-scrollfix"));
     assert!(html.contains("cursor-beacon"));
     assert!(html.contains("hero-panel panel interactive-card hero-mascot-panel"));
@@ -1632,6 +1632,26 @@ fn admin_user_management_wiring_exists() {
     assert!(css.contains(".admin-users-grid"));
     assert!(css.contains(".admin-user-row"));
     assert!(css.contains(".admin-danger-button"));
+}
+
+#[test]
+fn admin_note_rows_allow_full_title_and_summary_wrapping() {
+    let dashboard = fs::read_to_string("templates/admin/dashboard.html").unwrap();
+    let css = fs::read_to_string("static/css/app.css").unwrap();
+
+    assert!(dashboard.contains("class=\"stack-list admin-note-list\""));
+    assert!(dashboard.contains("class=\"list-card interactive-card admin-note-row\""));
+    assert!(dashboard.contains("class=\"admin-note-copy\""));
+    assert!(css.contains("align-items: start;"));
+    assert!(css.contains(".admin-grid > .panel.wide .admin-note-list"));
+    assert!(css.contains("width: min(100%, 920px);"));
+    assert!(css.contains(".admin-note-row {\n  display: grid;"));
+    assert!(css.contains("grid-template-columns: minmax(0, 1fr) max-content;"));
+    assert!(css.contains("min-height: 0;"));
+    assert!(css.contains(".admin-note-copy {\n  display: grid;"));
+    assert!(css.contains("overflow-wrap: anywhere;"));
+    assert!(css.contains("word-break: break-word;"));
+    assert!(css.contains("@media (max-width: 640px) {\n  .admin-note-row {"));
 }
 
 #[test]
