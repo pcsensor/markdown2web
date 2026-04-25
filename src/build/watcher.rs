@@ -20,16 +20,50 @@ pub async fn spawn_watcher(state: AppState) -> AppResult<()> {
     state.set_watcher_handle(watcher.clone()).await;
 
     tokio::spawn(async move {
-        while let Some(result) = rx.recv().await {
-            if let Ok(ref event) = result {
-                use notify::EventKind;
-                match event.kind {
-                    EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_) => {}
-                    _ => continue,
+        loop {
+            // 1. 阻塞等待第一个有效的文件变更事件
+            let mut event_received = false;
+            while let Some(result) = rx.recv().await {
+                if let Ok(event) = result {
+                    use notify::EventKind;
+                    match event.kind {
+                        EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_) => {
+                            event_received = true;
+                            break;
+                        }
+                        _ => continue,
+                    }
                 }
             }
-            tokio::time::sleep(Duration::from_millis(800)).await;
-            while rx.try_recv().is_ok() {}
+            
+            // 如果通道关闭，退出监听线程
+            if !event_received {
+                break;
+            }
+
+            // 2. 拖尾防抖：只要 800ms 内又有新的有效事件到来，就重置等待时间
+            loop {
+                match tokio::time::timeout(Duration::from_millis(800), rx.recv()).await {
+                    Ok(Some(Ok(event))) => {
+                        use notify::EventKind;
+                        match event.kind {
+                            EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_) => {
+                                // 收到新的有效事件，继续 inner loop 从而重置 800ms 超时
+                                continue;
+                            }
+                            _ => continue, // 忽略无效事件（如访问事件）
+                        }
+                    }
+                    Ok(Some(Err(_))) => continue, // 忽略 watcher 内部错误
+                    Ok(None) => return, // 通道关闭，直接退出
+                    Err(_) => {
+                        // Timeout 触发，意味着已经有整整 800ms 没有新事件了
+                        break;
+                    }
+                }
+            }
+
+            // 3. 执行重建
             let _ = state
                 .build_service
                 .rebuild("filesystem watcher")
