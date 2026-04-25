@@ -634,7 +634,25 @@ select:focus-visible {
 .hero-panel-top { display: flex; justify-content: space-between; align-items: center; }
 .hero-panel-copy { margin: 12px 0 0; font-size: 1.02rem; color: var(--text); }
 
-.card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 20px; }
+.card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 12px 20px; grid-auto-rows: 260px; align-items: stretch; }
+.card-grid .card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.card-grid .card > p {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, black 0%, black calc(100% - 24px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, black calc(100% - 24px), transparent 100%);
+  margin-bottom: 16px;
+}
+.card-grid .card-foot {
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: auto;
+}
 .stack-list { display: grid; gap: 16px; }
 .card, .panel, .list-card, .note-card, .sidebar-card, .search-panel, .note-hero {
   position: relative;
@@ -835,6 +853,8 @@ select:focus-visible {
 }
 
 .tag-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.tag-row:empty,
+.tag-row:not(:has(.tag)) { display: none; margin: 0; }
 .category-row { display: flex; flex-wrap: wrap; gap: 12px; margin: 28px 0 24px; }
 .tag {
   padding: 7px 12px;
