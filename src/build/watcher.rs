@@ -20,7 +20,14 @@ pub async fn spawn_watcher(state: AppState) -> AppResult<()> {
     state.set_watcher_handle(watcher.clone()).await;
 
     tokio::spawn(async move {
-        while rx.recv().await.is_some() {
+        while let Some(result) = rx.recv().await {
+            if let Ok(ref event) = result {
+                use notify::EventKind;
+                match event.kind {
+                    EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_) => {}
+                    _ => continue,
+                }
+            }
             tokio::time::sleep(Duration::from_millis(800)).await;
             while rx.try_recv().is_ok() {}
             let _ = state

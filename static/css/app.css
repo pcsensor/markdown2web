@@ -1390,8 +1390,18 @@ button.secondary, .button.secondary {
 
 .admin-header, .polished-admin-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
 .admin-grid { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 20px; margin-bottom: 20px; }
-.admin-grid .panel.wide { display: flex; flex-direction: column; }
-.admin-grid .panel.wide .stack-list.compact { flex: 1; overflow-y: auto; min-height: 0; padding-right: 6px; }
+.admin-grid > .admin-panel-stack { min-height: 0; }
+.admin-grid > .panel.wide { position: relative; }
+.admin-grid > .panel.wide .panel-title-row { height: 50px; box-sizing: border-box; }
+.admin-grid > .panel.wide .stack-list.compact {
+  position: absolute;
+  top: calc(22px + 50px);
+  bottom: 22px;
+  left: 22px;
+  right: 22px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
 .editor-grid { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 20px; }
 .editor-textarea { min-height: 620px; font-family: "SFMono-Regular", ui-monospace, Menlo, monospace; }
 .admin-panel-stack { display: grid; gap: 16px; }
@@ -1414,6 +1424,7 @@ button.secondary, .button.secondary {
 }
 .compact { gap: 12px; }
 .list-card.compact { align-items: center; }
+.list-card.compact > div:first-child { flex: 1; min-width: 0; }
 .admin-note-row { background: rgba(255,255,255,0.62); }
 .wide, .wide-editor { min-width: 0; }
 .annotation-toolbar {
