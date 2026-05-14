@@ -159,11 +159,13 @@ local wezterm = require 'wezterm'
 local config = wezterm.config_builder()
 local act = wezterm.action
 
+config.enable_wayland = false  -- 强制使用 XWayland
+
 -- ========== 字体设置 ==========
 config.font = wezterm.font_with_fallback({
     { family = "Maple Mono NF CN", weight = "Medium" },
 })
-config.font_size = 12.0
+config.font_size = 11.0
 config.line_height = 1.2
 
 -- ========== 窗口外观 ==========
@@ -261,7 +263,7 @@ config.mouse_bindings = {
 }
 
 -- ========== 启动 shell ==========
-config.default_prog = { "powershell" }
+config.default_prog = { "/bin/fish" }
 
 -- 启动时最大化窗口
 wezterm.on("gui-startup", function(cmd)
@@ -286,6 +288,7 @@ config.warn_about_missing_glyphs = false
 config.audible_bell = "Disabled"
 
 return config
+
 ```
 
 ## 将 WezTerm 的 CLI 目录加入 PATH
