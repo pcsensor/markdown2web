@@ -155,50 +155,35 @@ sudo snapper -c root create -d "overlayfs-ready test snapshot"
 
 #### 场景 B：确定了某个快照没问题，我要彻底时光倒流（永久回滚）
 
-最稳妥的“永久回滚”不是在快照系统内部敲命令，而是借助外部 Live 系统进行物理替换。
-
-1. 掏出你的 Arch ISO 安装盘（LiveUSB）并引导进入。
-2. 将你硬盘 Btrfs 的最顶层挂载上来：
 ```bash
-sudo mount -o subvolid=5 /dev/nvme0n1p6 /mnt
+# 挂顶层
+mount -o subvolid=5 /dev/nvme0n1p6 /mnt
 
-```
+# 删除旧@
+mv /mnt/@ /mnt/@.broken
 
+# 创建新@
+btrfs subvolume snapshot /mnt/@snapshots/120/snapshot /mnt/@
 
-3. 把你当前坏掉的系统子卷 `@` 挪走当成垃圾桶（或者直接删掉），然后把你挑中的完美快照“克隆”成新的 `@`：
-*(假设你想恢复到编号为 3 的快照)*
+# 卸载
+umount /mnt
 
-```bash
-   sudo mv /mnt/@ /mnt/@.broken-$(date +%F-%H%M)
-   sudo btrfs subvolume snapshot /mnt/@snapshots/3/snapshot /mnt/@
+# 挂真正根
+mount -o subvol=@ /dev/nvme0n1p6 /mnt
 
-```
+# EFI
+mkdir -p /mnt/boot/efi
+mount /dev/nvme0n1p1 /mnt/boot/efi
 
-4. （非常关键）重构引导文件，让 GRUB 认识这个新的 `@`：
-```bash
-sudo mkdir -p /mnt/boot/efi
-sudo mount /dev/nvme0n1p1 /mnt/boot/efi
-for i in dev proc sys run; do sudo mount --bind /$i /mnt/$i; done
-sudo arch-chroot /mnt
+# bind
+for i in dev proc sys run; do
+    mount --bind /$i /mnt/$i
+done
+
+# chroot
+arch-chroot /mnt
+
+# rebuild
 mkinitcpio -P
 grub-mkconfig -o /boot/grub/grub.cfg
-exit
-
-```
-
-
-5. 卸载重启，迎接你重生后的正常系统：
-```bash
-sudo umount -R /mnt
-sudo reboot
-
-```
-
-
-* **操作含义**：由于只回滚了 `@`（根目录），你所有的系统环境、软件版本都回去了。但是，因为你的家目录是独立的 `@home`，日志是 `@var_log`，所以你的**个人文件、浏览器记录、以及系统挂掉之前的故障日志**全都会完好无损地保留下来。
-
-
-
-```
-
 ```
