@@ -7,9 +7,9 @@
 - **公共站点** — SSR 渲染的笔记网站，支持标签、分类和全文搜索
 - **管理后台** — 登录、上传 Markdown、上传资源、编辑笔记与站点重建
 - **内容真源** — `content/notes` 与 `content/assets` 目录即站点内容
-- **自动重建** — 文件监听 + 800ms 防抖，内容变更自动触发 rebuild
+- **自动重建** — 文件监听 + 800 ms 防抖，内容变更自动触发 rebuild
 - **链接能力** — 支持相对 Markdown 链接、`[[Wiki Link]]` 与资源引用
-- **媒体优化** — 安装 ffmpeg 后自动生成多尺寸图片、压缩视频、生成 poster
+- **媒体优化** — 安装 FFmpeg 后自动生成多尺寸图片、压缩视频、生成 poster
 - **数学公式** — 支持 LaTeX 公式渲染
 - **代码高亮** — 支持主流 fenced code block 语法高亮
 - **微交互** — 滚动进度条、卡片指针光效、复制代码按钮等
@@ -99,12 +99,12 @@ aliases: [别名1]
 
 ## 大媒体优化
 
-项目优先使用 ffmpeg 在构建阶段处理大媒体资源，降低带宽压力：
+项目优先使用 FFmpeg 在构建阶段处理大媒体资源，降低带宽压力：
 
 - 图片生成多尺寸派生图，HTML 输出 `<picture>`、`srcset`、`loading="lazy"` 和 `decoding="async"`
 - 视频（`@[描述](视频路径)`）转为 720p 压缩 MP4，尽量生成 poster，页面使用 `preload="none"` + 点击加载的懒加载模式
 - 生成物存在且比源文件新时直接复用，避免重复转码
-- ffmpeg 缺失或处理失败时记录 warning 并回退到原资源
+- FFmpeg 缺失或处理失败时记录 warning 并回退到原资源
 
 > 生产部署建议将 `generated/site/assets` 放在对象存储或 CDN 后面，主服务仅承担 HTML 和 API 流量。
 
