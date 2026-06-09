@@ -542,3 +542,130 @@ Jellyfin 只扫具体影视目录
 rclone cache 不要过大
 优先 Direct Play
 ```
+
+# 18. 限速配置
+
+换成 **Linux 内核层限速：tc + CAKE**。
+它不管 Jellyfin、Nginx、Caddy，直接在服务器网卡出口整形，最接近“源头限速”。🧱
+
+## 1. 确认出口网卡
+
+```bash
+ip route get 1.1.1.1
+```
+
+看 `dev` 后面的网卡名，例如：
+
+```text
+dev eth0
+```
+
+下面假设网卡是 `eth0`。
+
+---
+
+## 2. 安装 tc
+
+Debian / Ubuntu：
+
+```bash
+apt update
+apt install -y iproute2
+```
+
+---
+
+## 3. 删除旧规则
+
+```bash
+tc qdisc del dev eth0 root 2>/dev/null || true
+```
+
+---
+
+## 4. 设置出口总带宽 + 按目标 IP 公平分配
+
+你的服务器是 **20Mbps**，建议限制到 **18Mbps**，留一点余量：
+
+```bash
+tc qdisc replace dev eth0 root cake bandwidth 18mbit besteffort dual-dsthost
+```
+
+效果：
+
+```text
+1 个人看：最多可用接近 18Mbps
+2 个人看：大约每人 9Mbps
+3 个人看：大约每人 6Mbps
+```
+
+这比 Nginx 更稳，因为它在网卡出口层面生效。
+
+---
+
+## 5. 验证
+
+播放时查看：
+
+```bash
+tc -s qdisc show dev eth0
+```
+
+看是否有流量统计增长。
+
+也可以看实时带宽：
+
+```bash
+apt install -y nload
+nload eth0
+```
+
+---
+
+## 6. 开机自启
+
+创建：
+
+```bash
+nano /etc/systemd/system/tc-cake-egress.service
+```
+
+内容：
+
+```ini
+[Unit]
+Description=CAKE egress shaping
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+
+ExecStart=/bin/bash -c 'tc qdisc del dev eth0 root 2>/dev/null || true; tc qdisc replace dev eth0 root cake bandwidth 18mbit besteffort dual-dsthost'
+ExecStop=/bin/bash -c 'tc qdisc del dev eth0 root 2>/dev/null || true'
+
+[Install]
+WantedBy=multi-user.target
+```
+
+启用：
+
+```bash
+systemctl daemon-reload
+systemctl enable --now tc-cake-egress.service
+```
+
+---
+
+## 重要前提
+
+Cloudflare 必须是：
+
+```text
+DNS only / 灰色云朵
+```
+
+如果走 Cloudflare 橙色云朵，服务器看到的目标 IP 主要是 Cloudflare 节点，不是真实用户，按用户公平分配会失效。
+
+这是更接近生产里的“出口整形”。
