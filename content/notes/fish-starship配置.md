@@ -33,6 +33,21 @@ fish_add_path /home/pcsensor/.nvm/versions/node/v24.15.0
 abbr -a la 'eza -lah'
 ```
 
+## nushell
+
+`$nu.config-path`
+
+```
+# ====================== Starship ======================
+mkdir ($nu.data-dir | path join "vendor/autoload")
+
+# 生成 starship 初始化文件
+starship init nu | save -f ($nu.data-dir | path join "vendor/autoload/starship.nu")
+
+# 加载 Starship
+use ($nu.data-dir | path join "vendor/autoload/starship.nu")
+```
+
 ## 主题
 
 ```
