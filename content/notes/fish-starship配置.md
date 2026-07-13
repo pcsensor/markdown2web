@@ -45,7 +45,7 @@ mkdir ($nu.data-dir | path join "vendor/autoload")
 starship init nu | save -f ($nu.data-dir | path join "vendor/autoload/starship.nu")
 
 # 加载 Starship
-use ($nu.data-dir | path join "vendor/autoload/starship.nu")
+source ($nu.data-dir | path join "vendor/autoload/starship.nu")
 ```
 
 ## 主题
