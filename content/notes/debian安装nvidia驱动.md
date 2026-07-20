@@ -1,7 +1,7 @@
 ---
 title: debian安装nvidia驱动
 slug: debian安装nvidia驱动
-summary: ''
+summary: 下次记得在BISO屏蔽独显
 category: []
 tags: []
 status: published

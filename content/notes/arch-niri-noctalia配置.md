@@ -1,7 +1,7 @@
 ---
 title: Arch_niri_noctalia配置
 slug: arch-niri-noctalia配置
-summary: ''
+summary: 没啥用，越来越讨厌折腾了，还是回归macOS的怀抱吧
 category: []
 tags: []
 status: published

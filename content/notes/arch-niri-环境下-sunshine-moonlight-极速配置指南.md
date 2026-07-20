@@ -1,7 +1,7 @@
 ---
 title: Arch + niri 环境下 Sunshine/Moonlight 极速配置指南
 slug: arch-niri-环境下-sunshine-moonlight-极速配置指南
-summary: ''
+summary: 没啥用，越来越讨厌折腾了，还是回归macOS的怀抱吧
 category: []
 tags: []
 status: published

@@ -1,7 +1,7 @@
 ---
 title: archinstall 前的分区
 slug: archinstall-前的分区
-summary: ''
+summary: 就你最麻烦，赶紧出GUI
 category: []
 tags: []
 status: published

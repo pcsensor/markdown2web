@@ -1,7 +1,7 @@
 ---
 title: FastGPT知识库
 slug: fastgpt知识库
-summary: ''
+summary: 不好用，别配
 category: []
 tags: []
 status: published

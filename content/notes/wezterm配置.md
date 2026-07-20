@@ -1,7 +1,7 @@
 ---
 title: wezterm配置
 slug: wezterm配置
-summary: ''
+summary: Windows还是"终端"好用
 category: []
 tags: []
 status: published

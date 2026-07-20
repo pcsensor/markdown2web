@@ -1,7 +1,7 @@
 ---
 title: linux目录名修改
 slug: linux目录名修改
-summary: ''
+summary: 最讨厌这个了
 category: []
 tags: []
 status: published

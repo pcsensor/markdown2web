@@ -1,7 +1,7 @@
 ---
 title: fish+starship配置
 slug: fish-starship配置
-summary: ''
+summary: 现在闭着眼都能配好了
 category: []
 tags: []
 status: published

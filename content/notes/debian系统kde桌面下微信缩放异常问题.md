@@ -1,7 +1,7 @@
 ---
 title: debian系统KDE桌面下微信缩放异常问题
 slug: debian系统kde桌面下微信缩放异常问题
-summary: ''
+summary: 现在貌似没有这个问题了
 category: []
 tags: []
 status: published

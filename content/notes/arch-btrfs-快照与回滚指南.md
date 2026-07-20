@@ -1,7 +1,7 @@
 ---
 title: Arch Btrfs 快照与回滚指南
 slug: arch-btrfs-快照与回滚指南
-summary: ''
+summary: 没啥用，越来越讨厌折腾了，还是回归macOS的怀抱吧
 category: []
 tags: []
 status: published

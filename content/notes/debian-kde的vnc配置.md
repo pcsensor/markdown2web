@@ -1,7 +1,7 @@
 ---
 title: Debian-KDE的vnc配置
 slug: debian-kde的vnc配置
-summary: ''
+summary: 别配了，不用Debian了
 category: []
 tags: []
 status: published

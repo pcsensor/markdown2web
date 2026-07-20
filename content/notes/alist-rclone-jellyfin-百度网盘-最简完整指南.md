@@ -1,7 +1,7 @@
 ---
 title: AList + rclone + Jellyfin（百度网盘）最简完整指南
 slug: alist-rclone-jellyfin-百度网盘-最简完整指南
-summary: ''
+summary: AList + rclone + Jellyfin未工程化优化版本
 category: []
 tags: []
 status: published
