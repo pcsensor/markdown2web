@@ -72,14 +72,23 @@ async fn home_and_note_routes_render_content() {
     let html = String::from_utf8(body.to_vec()).unwrap();
     assert!(html.contains("Welcome to markdown2web"));
     assert!(html.contains("reading-progress"));
-    assert!(html.contains("/static/css/app.css?v=20260425-adminnotes-wrap-06"));
-    assert!(html.contains("/static/js/site.js?v=20260420-scrollfix"));
+    assert!(html.contains("/static/css/app.css?v=20260720-neobrutal-01"));
+    assert!(html.contains("/static/js/site.js?v=20260720-neobrutal-01"));
     assert!(html.contains("cursor-beacon"));
+    assert!(html.contains("marquee"));
+    assert!(html.contains("nav__logo"));
     assert!(html.contains("hero-panel panel interactive-card hero-mascot-panel"));
     assert!(html.contains("data-mascot"));
     assert!(html.contains("mascot-stage"));
     assert!(!html.contains("hero-particle-canvas"));
     assert!(html.contains("metric-card interactive-card interactive-card-subtle"));
+    assert!(html.contains("hero__title-mark"));
+    assert!(html.contains("card__more"));
+    assert!(html.contains("id=\"about\""));
+    assert!(html.contains("关于我"));
+    assert!(html.contains("<strong>Justin</strong>"));
+    assert!(html.contains("LOCATION:"));
+    assert!(html.contains("河北唐山"));
 
     let response = router
         .oneshot(

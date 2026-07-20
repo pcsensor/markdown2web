@@ -1,19 +1,16 @@
 {% extends "base.html" %}
 {% block title %}搜索 · {{ site_name }}{% endblock %}
 {% block content %}
-<section class="stack-header enhanced-header">
-  <div class="header-icon" aria-hidden="true">
-    <svg viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="4.5" /><path d="m12.5 12.5 4 4" /></svg>
-  </div>
-  <div>
-    <p class="eyebrow">Search</p>
-    <h1>搜索笔记</h1>
-    <p class="muted">通过标题、摘要、标签或正文关键词快速定位内容。</p>
-  </div>
+<section class="stack-header page-intro">
+  <h1 class="section-title">
+    <span class="section-title__tag mono">03</span>
+    搜索笔记
+  </h1>
+  <p class="muted">通过标题、摘要、标签或正文关键词快速定位内容。</p>
 </section>
 <form class="search-form search-panel panel interactive-card" action="/search" method="get">
   <input type="search" name="q" value="{{ query }}" placeholder="输入标题、摘要、标签或正文关键词" />
-  <button type="submit">搜索</button>
+  <button type="submit" class="btn btn--pink">搜索</button>
 </form>
 <div class="stack-list">
   {% for note in notes %}

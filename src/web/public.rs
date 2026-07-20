@@ -1,3 +1,6 @@
+use std::sync::OnceLock;
+use std::time::{Duration, Instant};
+
 use askama::Template;
 use axum::{
     extract::{Path, Query, State},
@@ -5,6 +8,7 @@ use axum::{
 };
 use axum_extra::extract::cookie::CookieJar;
 use serde::Deserialize;
+use tokio::sync::Mutex;
 
 use crate::{
     app::AppState,
@@ -13,6 +17,101 @@ use crate::{
     search::index::search_notes,
     web::auth,
 };
+
+const TANGSHAN_LAT: f64 = 39.6309;
+const TANGSHAN_LON: f64 = 118.1802;
+const WEATHER_CACHE_TTL: Duration = Duration::from_secs(15 * 60);
+const WEATHER_FALLBACK: &str = "河北唐山 · —°C · 天气获取中";
+
+struct WeatherCache {
+    line: String,
+    fetched_at: Instant,
+}
+
+fn weather_cache() -> &'static Mutex<Option<WeatherCache>> {
+    static CACHE: OnceLock<Mutex<Option<WeatherCache>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(None))
+}
+
+fn wmo_weather_zh(code: i32) -> &'static str {
+    match code {
+        0 => "晴",
+        1 => "大体晴朗",
+        2 => "多云",
+        3 => "阴",
+        45 | 48 => "雾",
+        51 | 53 | 55 => "毛毛雨",
+        56 | 57 => "冻毛毛雨",
+        61 | 63 | 65 => "雨",
+        66 | 67 => "冻雨",
+        71 | 73 | 75 | 77 => "雪",
+        80 | 81 | 82 => "阵雨",
+        85 | 86 => "阵雪",
+        95 => "雷阵雨",
+        96 | 99 => "雷暴伴冰雹",
+        _ => "多变",
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenMeteoResponse {
+    current: Option<OpenMeteoCurrent>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenMeteoCurrent {
+    temperature_2m: Option<f64>,
+    weather_code: Option<i32>,
+}
+
+async fn fetch_tangshan_location_line() -> String {
+    {
+        let guard = weather_cache().lock().await;
+        if let Some(cache) = guard.as_ref() {
+            if cache.fetched_at.elapsed() < WEATHER_CACHE_TTL {
+                return cache.line.clone();
+            }
+        }
+    }
+
+    let url = format!(
+        "https://api.open-meteo.com/v1/forecast?latitude={TANGSHAN_LAT}&longitude={TANGSHAN_LON}&current=temperature_2m,weather_code&timezone=Asia%2FShanghai"
+    );
+
+    let line = match reqwest::Client::new()
+        .get(&url)
+        .timeout(Duration::from_secs(4))
+        .send()
+        .await
+    {
+        Ok(response) => match response.json::<OpenMeteoResponse>().await {
+            Ok(payload) => {
+                let current = payload.current.unwrap_or(OpenMeteoCurrent {
+                    temperature_2m: None,
+                    weather_code: None,
+                });
+                let temp = current
+                    .temperature_2m
+                    .map(|t| format!("{:.0}°C", t))
+                    .unwrap_or_else(|| "—°C".into());
+                let desc = current
+                    .weather_code
+                    .map(wmo_weather_zh)
+                    .unwrap_or("多变");
+                format!("河北唐山 · {temp} · {desc}")
+            }
+            Err(_) => WEATHER_FALLBACK.into(),
+        },
+        Err(_) => WEATHER_FALLBACK.into(),
+    };
+
+    let mut guard = weather_cache().lock().await;
+    *guard = Some(WeatherCache {
+        line: line.clone(),
+        fetched_at: Instant::now(),
+    });
+    line
+}
 
 #[derive(Debug, Clone)]
 struct LinkView {
@@ -26,6 +125,7 @@ struct HomeTemplate {
     site_name: String,
     notes: Vec<Note>,
     build_message: String,
+    location_line: String,
 }
 
 #[derive(Template)]
@@ -81,10 +181,12 @@ pub struct SearchQuery {
 
 pub async fn home(State(state): State<AppState>) -> AppResult<Html<String>> {
     let site = state.site.read().await.clone();
+    let location_line = fetch_tangshan_location_line().await;
     render(HomeTemplate {
         site_name: state.config.site_name.clone(),
         notes: site.published_notes().into_iter().take(8).collect(),
         build_message: site.build_message,
+        location_line,
     })
 }
 

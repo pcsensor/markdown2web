@@ -4,12 +4,12 @@
 {% block content %}
 <div class="note-hero panel interactive-card">
   <div class="note-hero-main">
-    <p class="eyebrow">{{ note.updated_at }}</p>
+    <p class="eyebrow mono">{{ note.updated_at }}</p>
     <h1>{{ note.title }}</h1>
     <p class="note-summary">{{ note.summary }}</p>
     <div class="tag-row">
       {% for tag in note.tags %}
-      <a class="tag" href="/tags/{{ tag }}">{{ tag }}</a>
+      <a class="tag mono" href="/tags/{{ tag }}">{{ tag }}</a>
       {% endfor %}
     </div>
   </div>
@@ -43,9 +43,6 @@
   <aside class="note-sidebar">
     <div class="sidebar-card interactive-card sidebar-panel annotation-auth-card">
       <div class="sidebar-title-row">
-        <span class="surface-icon small" aria-hidden="true">
-          <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="7" r="3" /><path d="M4.5 17c1.1-2.7 3-4 5.5-4s4.4 1.3 5.5 4" /></svg>
-        </span>
         <h2>批注权限</h2>
       </div>
       {% match viewer %}
@@ -53,25 +50,22 @@
           <p class="muted">当前已登录：{{ username }}</p>
           <p class="annotation-helper">选中文字即可高亮或评论；评论可设为公开或私密。</p>
           <div class="annotation-auth-actions">
-            <a class="button secondary" href="/account?next=/notes/{{ note.slug }}">账号中心</a>
+            <a class="btn btn--sm btn--blue button secondary" href="/account?next=/notes/{{ note.slug }}">账号中心</a>
             <form action="/account/logout" method="post">
               <input type="hidden" name="next" value="/notes/{{ note.slug }}" />
-              <button class="secondary" type="submit">退出登录</button>
+              <button class="btn btn--sm secondary" type="submit">退出登录</button>
             </form>
           </div>
         {% when None %}
           <p class="muted">登录后即可添加高亮与评论；公开评论无需登录也可查看。</p>
           <div class="annotation-auth-actions">
-            <a class="button" href="/account?next=/notes/{{ note.slug }}">登录 / 注册</a>
+            <a class="btn btn--sm btn--pink button" href="/account?next=/notes/{{ note.slug }}">登录 / 注册</a>
           </div>
         {% endmatch %}
     </div>
 
     <div class="sidebar-card interactive-card sidebar-panel">
       <div class="sidebar-title-row">
-        <span class="surface-icon small" aria-hidden="true">
-          <svg viewBox="0 0 20 20" fill="none"><path d="M8 5 4 9l4 4" /><path d="M12 5l4 4-4 4" /><path d="M7 15h6" /></svg>
-        </span>
         <h2>Backlinks</h2>
       </div>
       <ul class="link-list">
@@ -86,9 +80,6 @@
 
     <div class="sidebar-card interactive-card sidebar-panel toc-sticky-panel">
       <div class="sidebar-title-row">
-        <span class="surface-icon small" aria-hidden="true">
-          <svg viewBox="0 0 20 20" fill="none"><path d="M5 6h10M5 10h10M5 14h6" /></svg>
-        </span>
         <h2>目录</h2>
       </div>
       <ul class="toc-list">
@@ -102,9 +93,6 @@
   <aside class="annotation-rail">
     <div class="sidebar-card interactive-card sidebar-panel annotation-rail-card">
       <div class="sidebar-title-row">
-        <span class="surface-icon small" aria-hidden="true">
-          <svg viewBox="0 0 20 20" fill="none"><path d="M6 5h8a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H9l-3 2v-2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" /></svg>
-        </span>
         <h2>评论轨道</h2>
       </div>
       <div class="annotation-comment-lane" data-annotation-comment-lane>
@@ -122,7 +110,7 @@
 
 <div class="annotation-toolbar" data-annotation-toolbar hidden>
   <button type="button" class="annotation-toolbar-button" data-annotation-highlight>高亮</button>
-  <input type="color" class="annotation-color-input" data-annotation-color value="#fde68a" aria-label="选择高亮颜色" />
+  <input type="color" class="annotation-color-input" data-annotation-color value="#FFD21F" aria-label="选择高亮颜色" />
   <button type="button" class="annotation-toolbar-button secondary" data-annotation-comment>评论</button>
   <button type="button" class="annotation-toolbar-button danger" data-annotation-delete-comment hidden>删除评论</button>
 </div>
@@ -132,10 +120,10 @@
   <div class="annotation-modal panel interactive-card" role="dialog" aria-modal="true" aria-labelledby="annotation-modal-title">
     <div class="annotation-modal-head">
       <div>
-        <p class="eyebrow">Comment</p>
+        <p class="eyebrow mono">Comment</p>
         <h2 id="annotation-modal-title">添加评论</h2>
       </div>
-      <button type="button" class="button secondary annotation-modal-dismiss" data-annotation-modal-close>关闭</button>
+      <button type="button" class="btn btn--sm button secondary annotation-modal-dismiss" data-annotation-modal-close>关闭</button>
     </div>
     <p class="annotation-modal-quote" data-annotation-modal-quote></p>
     <label class="annotation-modal-field">
@@ -150,8 +138,8 @@
       </select>
     </label>
     <div class="annotation-modal-actions">
-      <button type="button" class="button secondary" data-annotation-modal-close>取消</button>
-      <button type="button" class="button" data-annotation-comment-save>保存评论</button>
+      <button type="button" class="btn btn--sm button secondary" data-annotation-modal-close>取消</button>
+      <button type="button" class="btn btn--sm btn--yellow button" data-annotation-comment-save>保存评论</button>
     </div>
   </div>
 </div>

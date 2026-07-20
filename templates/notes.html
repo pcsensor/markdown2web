@@ -1,45 +1,42 @@
 {% extends "base.html" %}
 {% block title %}{{ title }} · {{ site_name }}{% endblock %}
 {% block content %}
-<section class="stack-header enhanced-header">
-  <div class="header-icon" aria-hidden="true">
-    <svg viewBox="0 0 20 20" fill="none"><rect x="4" y="3" width="12" height="14" rx="3" /><path d="M7 7h6M7 10h6M7 13h4" /></svg>
-  </div>
-  <div>
-    <p class="eyebrow">Knowledge base</p>
-    <h1>{{ title }}</h1>
-    <p class="muted">按内容结构浏览你的 Markdown 知识库。</p>
+<section class="stack-header page-intro">
+  <h1 class="section-title">
+    <span class="section-title__tag mono">01</span>
+    {{ title }}
+    <span class="section-title__doodle" aria-hidden="true">✱</span>
+  </h1>
+  <p class="muted">按内容结构浏览你的 Markdown 知识库。</p>
+</section>
+
+{% if !categories.is_empty() %}
+<section class="filters filters--tight">
+  <div class="filters__chips category-row" role="group" aria-label="按分类筛选">
+    <a class="chip is-active" href="/notes">全部</a>
+    {% for category in categories %}
+    <a class="chip chip--{% if loop.index0 % 4 == 0 %}pink{% elif loop.index0 % 4 == 1 %}blue{% elif loop.index0 % 4 == 2 %}yellow{% else %}green{% endif %} category-tag" href="/categories/{{ category }}"># {{ category }}</a>
+    {% endfor %}
   </div>
 </section>
-{% if !categories.is_empty() %}
-<div class="category-row">
-  {% for category in categories %}
-  <a class="category-tag" href="/categories/{{ category }}">{{ category }}</a>
-  {% endfor %}
-  </div>
 {% endif %}
-<div class="stack-list">
+
+<section class="grid card-grid stack-list">
   {% for note in notes %}
-  <article class="list-card interactive-card">
-    <div class="list-card-body">
-      <div class="list-meta-row">
-        <span class="surface-icon small" aria-hidden="true">
-          <svg viewBox="0 0 20 20" fill="none"><path d="M5 4h7l3 3v9H5z" /><path d="M12 4v3h3" /></svg>
-        </span>
-        <span class="card-meta">{{ note.updated_at }}</span>
-      </div>
-      <h2><a href="/notes/{{ note.slug }}">{{ note.title }}</a></h2>
-      <p>{{ note.summary }}</p>
-      <div class="tag-row">
-        {% for tag in note.tags %}
-        <a class="tag" href="/tags/{{ tag }}">{{ tag }}</a>
-        {% endfor %}
-      </div>
+  <article class="card list-card interactive-card" style="--tilt:{% if loop.index0 % 2 == 0 %}-1deg{% else %}1deg{% endif %}">
+    <div class="card__top">
+      <span class="card__cat mono">NOTE</span>
+      <span class="card__date mono card-meta">{{ note.updated_at }}</span>
     </div>
-    <div class="list-card-side">
-      <span class="arrow-badge">→</span>
+    <h3 class="card__title"><a href="/notes/{{ note.slug }}">{{ note.title }}</a></h3>
+    <p class="card__excerpt">{{ note.summary }}</p>
+    <div class="card__tags tag-row">
+      {% for tag in note.tags %}
+      <a class="tag mono" href="/tags/{{ tag }}">{{ tag }}</a>
+      {% endfor %}
     </div>
+    <a href="/notes/{{ note.slug }}" class="card__more">阅读全文 <span aria-hidden="true">→</span></a>
   </article>
   {% endfor %}
-</div>
+</section>
 {% endblock %}

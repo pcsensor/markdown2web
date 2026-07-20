@@ -3,7 +3,7 @@
 {% block content %}
 <section class="auth-shell auth-grid account-grid">
   <div class="auth-copy">
-    <p class="eyebrow">Reader annotations</p>
+    <p class="eyebrow mono">Reader annotations</p>
     <h1>登录后即可高亮与评论文章。</h1>
     <p class="muted">公开访客依然可以阅读公开评论；注册或登录后，你可以决定评论是公开还是私密。</p>
     <div class="feature-pills">
@@ -16,14 +16,14 @@
   {% match current_user %}
     {% when Some with (username) %}
       <div class="panel interactive-card auth-panel account-status-panel">
-        <p class="eyebrow">Signed in</p>
+        <p class="eyebrow mono">Signed in</p>
         <h2>{{ username }}</h2>
         <p class="muted">现在可以在文章页选中文字进行高亮与评论，并选择公开或私密。</p>
         <div class="stack-form">
-          <a class="button" href="{{ next }}">返回当前页面</a>
+          <a class="btn btn--yellow button" href="{{ next }}">返回当前页面</a>
           <form action="/account/logout" method="post">
             <input type="hidden" name="next" value="{{ next }}" />
-            <button class="secondary" type="submit">退出登录</button>
+            <button class="btn btn--sm secondary" type="submit">退出登录</button>
           </form>
         </div>
       </div>
@@ -31,7 +31,7 @@
       <div class="account-form-stack">
         <div id="login-panel"{% if register_error.is_some() %} style="display: none;"{% endif %}>
           <form class="panel interactive-card auth-panel" action="/account/login" method="post" data-turnstile-form>
-            <p class="eyebrow">Login</p>
+            <p class="eyebrow mono">Login</p>
             <h2>登录账号</h2>
             {% match login_error %}
               {% when Some with (message) %}
@@ -45,14 +45,14 @@
             <input type="hidden" name="cf-turnstile-response" data-turnstile-response />
             <div class="turnstile-lazy" data-turnstile-lazy data-sitekey="{{ turnstile_site_key }}" data-theme="light" aria-live="polite"></div>
             {% endif %}
-            <button type="submit">登录并返回</button>
+            <button type="submit" class="btn btn--pink">登录并返回</button>
           </form>
           <p class="auth-switch">还没有账号？<a href="#" id="show-register">立即注册</a></p>
         </div>
 
         <div id="register-panel"{% if register_error.is_some() %}{% else %} style="display: none;"{% endif %}>
           <form class="panel interactive-card auth-panel" action="/account/register" method="post" data-turnstile-form>
-            <p class="eyebrow">Register</p>
+            <p class="eyebrow mono">Register</p>
             <h2>注册账号</h2>
             {% match register_error %}
               {% when Some with (message) %}
@@ -66,7 +66,7 @@
             <input type="hidden" name="cf-turnstile-response" data-turnstile-response />
             <div class="turnstile-lazy" data-turnstile-lazy data-sitekey="{{ turnstile_site_key }}" data-theme="light" aria-live="polite"></div>
             {% endif %}
-            <button type="submit">注册并登录</button>
+            <button type="submit" class="btn btn--yellow">注册并登录</button>
           </form>
           <p class="auth-switch">已有账号？<a href="#" id="show-login">返回登录</a></p>
         </div>

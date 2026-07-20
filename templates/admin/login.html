@@ -3,7 +3,7 @@
 {% block content %}
 <section class="auth-shell auth-grid">
   <div class="auth-copy">
-    <p class="eyebrow">Admin access</p>
+    <p class="eyebrow mono">Admin access</p>
     <h1>登录后台，管理你的知识花园。</h1>
     <p class="muted">上传 Markdown、更新资源，并在几秒内把变化同步到网站前台。</p>
     <div class="feature-pills">
@@ -13,7 +13,7 @@
     </div>
   </div>
   <form class="panel interactive-card auth-panel" action="/admin/login" method="post" data-turnstile-form>
-    <p class="eyebrow">Admin</p>
+    <p class="eyebrow mono">Admin</p>
     <h2>登录后台</h2>
     {% match success %}
       {% when Some with (message) %}
@@ -31,7 +31,7 @@
     <input type="hidden" name="cf-turnstile-response" data-turnstile-response />
     <div class="turnstile-lazy" data-turnstile-lazy data-sitekey="{{ turnstile_site_key }}" data-theme="light" aria-live="polite"></div>
     {% endif %}
-    <button type="submit">进入控制台</button>
+    <button type="submit" class="btn btn--pink">进入控制台</button>
   </form>
 </section>
 {% endblock %}

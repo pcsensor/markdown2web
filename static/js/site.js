@@ -1200,6 +1200,15 @@ function wireTocScrollSpy() {
     if (headings.length) update();
   });
 }
+function wireBackToTop() {
+  document.querySelectorAll('[data-back-to-top]').forEach((link) => {
+    link.addEventListener('click', (event) => {
+      event.preventDefault();
+      window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+    });
+  });
+}
+
 function init() {
   document.body.classList.add('js-ready');
   markCurrentNav();
@@ -1218,6 +1227,7 @@ function init() {
   wireLazyTurnstile();
   wireAudioPlayers();
   wireVideoPlayers();
+  wireBackToTop();
 }
 
 function wireAccountToggle() {

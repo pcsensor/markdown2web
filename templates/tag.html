@@ -1,27 +1,23 @@
 {% extends "base.html" %}
 {% block title %}标签 {{ tag }} · {{ site_name }}{% endblock %}
 {% block content %}
-<section class="stack-header enhanced-header">
-  <div class="header-icon" aria-hidden="true">
-    <svg viewBox="0 0 20 20" fill="none"><path d="M4 7.5V4h3.5l8 8-3.5 3.5-8-8Z" /><circle cx="7.2" cy="7" r=".9" fill="currentColor" stroke="none" /></svg>
-  </div>
-  <div>
-    <p class="eyebrow">Tag view</p>
-    <h1>#{{ tag }}</h1>
-    <p class="muted">聚合同一主题下的所有笔记内容。</p>
-  </div>
+<section class="stack-header page-intro">
+  <h1 class="section-title">
+    <span class="section-title__tag mono">TAG</span>
+    #{{ tag }}
+  </h1>
+  <p class="muted">聚合同一主题下的所有笔记内容。</p>
 </section>
-<div class="stack-list">
+<section class="grid card-grid stack-list">
   {% for note in notes %}
-  <article class="list-card interactive-card">
-    <div class="list-card-body">
-      <h2><a href="/notes/{{ note.slug }}">{{ note.title }}</a></h2>
-      <p>{{ note.summary }}</p>
+  <article class="card list-card interactive-card" style="--tilt:{% if loop.index0 % 2 == 0 %}-1deg{% else %}1deg{% endif %}">
+    <div class="card__top">
+      <span class="card__cat mono">NOTE</span>
     </div>
-    <div class="list-card-side">
-      <span class="arrow-badge">→</span>
-    </div>
+    <h3 class="card__title"><a href="/notes/{{ note.slug }}">{{ note.title }}</a></h3>
+    <p class="card__excerpt">{{ note.summary }}</p>
+    <a href="/notes/{{ note.slug }}" class="card__more">阅读全文 <span aria-hidden="true">→</span></a>
   </article>
   {% endfor %}
-</div>
+</section>
 {% endblock %}
