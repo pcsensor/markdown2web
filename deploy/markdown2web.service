@@ -1,0 +1,36 @@
+[Unit]
+Description=markdown2web — Markdown notes SSR site + admin
+After=network.target
+
+[Service]
+Type=simple
+User=m2w
+Group=m2w
+WorkingDirectory=/opt/markdown2web
+EnvironmentFile=/opt/markdown2web/env
+ExecStart=/opt/markdown2web/markdown2web
+Restart=on-failure
+RestartSec=3
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# content: notes/assets source of truth (admin upload)
+# generated: rebuild output
+# data: SQLite
+ReadWritePaths=/opt/markdown2web/content /opt/markdown2web/generated /opt/markdown2web/data
+CapabilityBoundingSet=
+AmbientCapabilities=
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+
+# Resource limits (adjust as needed)
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

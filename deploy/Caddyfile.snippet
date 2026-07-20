@@ -1,0 +1,33 @@
+# markdown2web — Caddy reverse proxy snippet (automatic HTTPS)
+# DNS (grey cloud / DNS-only) must point to this host for Let's Encrypt.
+# Merge into /etc/caddy/Caddyfile or use as a standalone site block.
+#
+# Replace notes.example.com with your real domain.
+
+notes.example.com {
+	encode gzip
+
+	# Match app upload limit (M2W_UPLOAD_LIMIT_MB=128) with headroom
+	request_body {
+		max_size 140MB
+	}
+
+	header {
+		X-Frame-Options "DENY"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	reverse_proxy 127.0.0.1:3000 {
+		header_up Host {host}
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+		# Long-lived for large uploads / admin rebuild
+		transport http {
+			read_timeout 3600s
+			write_timeout 3600s
+		}
+	}
+}
